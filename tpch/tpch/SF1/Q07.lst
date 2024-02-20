@@ -1,0 +1,425 @@
+--####################################################################
+--# Volume Shipping Query (Q7)
+--####################################################################
+
+--# This query determines the value of goods shipped between 
+--# certain nations to help in the re-negotiation of shipping contracts.
+
+--###############################
+--# Business Question
+--###############################
+
+--# The Volume Shipping Query finds, for two given nations, 
+--# the gross discounted revenues derived from lineitems 
+--# in which parts were shipped from a supplier in either nation 
+--# to a customer in the other nation during 1995 and 1996. 
+--# The query lists the supplier nation, the customer nation, 
+--# the year, and the revenue from shipments that took place in that year.
+--# The query orders the answer by Supplier nation, Customer nation, 
+--# and year (all ascending).
+
+\explain plan
+select
+    supp_nation,
+    cust_nation,
+    l_year, 
+    ROUND( sum(volume), 2 ) as revenue
+from (
+       select
+           n1.n_name as supp_nation,
+           n2.n_name as cust_nation,
+           extract(year from l_shipdate) as l_year,
+           l_extendedprice * (1 - l_discount) as volume
+       from
+           supplier,
+           lineitem,
+           orders,
+           customer,
+           nation n1,
+           nation n2
+       where
+             s_suppkey = l_suppkey
+         and o_orderkey = l_orderkey
+         and c_custkey = o_custkey
+         and s_nationkey = n1.n_nationkey
+         and c_nationkey = n2.n_nationkey
+         and (
+               (n1.n_name = 'FRANCE' and n2.n_name = 'GERMANY')
+               or (n1.n_name = 'GERMANY' and n2.n_name = 'FRANCE')
+             )
+         and l_shipdate between date '1995-01-01' and date '1996-12-31'
+     ) shipping
+group by
+    supp_nation,
+    cust_nation,
+    l_year
+order by
+    supp_nation,
+    cust_nation,
+    l_year;
+
+SUPP_NATION               CUST_NATION               L_YEAR     REVENUE
+------------------------- ------------------------- ------ -----------
+FRANCE                    GERMANY                     1995 54639732.73
+FRANCE                    GERMANY                     1996 54633083.31
+GERMANY                   FRANCE                      1995 52531746.67
+GERMANY                   FRANCE                      1996 52520549.02
+
+4 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+=================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                           |                    ROWS |
+-----------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                           |                       4 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                |                       4 |
+|    2  |      SORT INSTANT                                                           |                       4 |
+|    3  |        GROUP HASH INSTANT                                                   |                       4 |
+|    4  |          CONCAT (Compare Nothing)                                           |                    5924 |
+|    5  |            PLAN BASED CLUSTER                                               | LOCAL/REMOTE       3014 |
+|    6  |              HASH JOIN (INNER JOIN)                                         |                    1494 |
+|    7  |                HASH JOIN (INNER JOIN)                                       |                   36535 |
+|    8  |                  NESTED JOIN (INNER JOIN)                                   |                   36535 |
+|    9  |                    NESTED JOIN (INNER JOIN)                                 |                   29862 |
+|   10  |                      NESTED JOIN (INNER JOIN)                               |                    5908 |
+|   11  |                        TABLE ACCESS ("NATION" AS N2)                        |                       1 |
+|   12  |                        INDEX ACCESS ("CUSTOMER", "CUSTOMER_NATIONKEY_FK")   | (      5908)       5908 |
+|   13  |                      INDEX ACCESS ("ORDERS", "ORDERS_CUSTKEY_FK")           | (     29862)      29862 |
+|   14  |                    INDEX ACCESS ("LINEITEM", "LINEITEM_ORDERKEY_FK")        | (    119760)      36535 |
+|   15  |                  HASH JOIN INSTANT                                          |                   36535 |
+|   16  |                    TABLE ACCESS ("SUPPLIER")                                |                   10000 |
+|   17  |                HASH JOIN INSTANT                                            |                    1494 |
+|   18  |                  TABLE ACCESS ("NATION" AS N1)                              |                       1 |
+|   19  |            PLAN BASED CLUSTER                                               | LOCAL/REMOTE       2910 |
+|   20  |              HASH JOIN (INNER JOIN)                                         |                    1445 |
+|   21  |                HASH JOIN (INNER JOIN)                                       |                   37688 |
+|   22  |                  NESTED JOIN (INNER JOIN)                                   |                   37688 |
+|   23  |                    NESTED JOIN (INNER JOIN)                                 |                   30835 |
+|   24  |                      NESTED JOIN (INNER JOIN)                               |                    6100 |
+|   25  |                        TABLE ACCESS ("NATION" AS N2)                        |                       1 |
+|   26  |                        INDEX ACCESS ("CUSTOMER", "CUSTOMER_NATIONKEY_FK")   | (      6100)       6100 |
+|   27  |                      INDEX ACCESS ("ORDERS", "ORDERS_CUSTKEY_FK")           | (     30835)      30835 |
+|   28  |                    INDEX ACCESS ("LINEITEM", "LINEITEM_ORDERKEY_FK")        | (    123281)      37688 |
+|   29  |                  HASH JOIN INSTANT                                          |                   37688 |
+|   30  |                    TABLE ACCESS ("SUPPLIER")                                |                   10000 |
+|   31  |                HASH JOIN INSTANT                                            |                    1445 |
+|   32  |                  TABLE ACCESS ("NATION" AS N1)                              |                       1 |
+=================================================================================================================
+
+     1  -  TARGET : N1.N_NAME, N2.N_NAME, EXTRACT( YEAR FROM LINEITEM.L_SHIPDATE ), ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2) AS REVENUE
+     2  -  SORT KEY : "N1.N_NAME ASC NULLS LAST", "N2.N_NAME ASC NULLS LAST", "EXTRACT( YEAR FROM LINEITEM.L_SHIPDATE ) ASC NULLS LAST"
+           RECORD COLUMN : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2)
+           READ KEY COLUMN : N1.N_NAME, N2.N_NAME, EXTRACT( YEAR FROM LINEITEM.L_SHIPDATE )
+           READ RECORD COLUMN : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2)
+     3  -  GROUP KEY : N1.N_NAME, N2.N_NAME, EXTRACT( YEAR FROM LINEITEM.L_SHIPDATE )
+           RECORD COLUMN : SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) )
+           READ KEY COLUMN : N1.N_NAME, N2.N_NAME, EXTRACT( YEAR FROM LINEITEM.L_SHIPDATE )
+           READ RECORD COLUMN : SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) )
+     4  -  CONCAT COLUMN : N1.N_NAME, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+     5  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_HASH_IN( _A1, 1 ) USE_HASH_IN( _A2, 10000 ) USE_NL_IN( _A3 ) USE_NL_IN( _A4 ) USE_NL_IN( _A5 ) FULL( _A6 ) INDEX( _A5, "PUBLIC"."CUSTOMER_NATIONKEY_FK" ) INDEX( _A4, "PUBLIC"."ORDERS_CUSTKEY_FK" ) INDEX( _A3, "PUBLIC"."LINEITEM_ORDERKEY_FK" ) FULL( _A2 ) FULL( _A1 ) */ "_A1"."N_NAME", "_A6"."N_NAME", "_A3"."L_SHIPDATE", "_A3"."L_EXTENDEDPRICE", "_A3"."L_DISCOUNT" FROM ( ( ( ( ( "PUBLIC"."NATION"@LOCAL AS "_A6" INNER JOIN "PUBLIC"."CUSTOMER"@LOCAL AS "_A5" ON true ) ALIAS "_A7" INNER JOIN "PUBLIC"."ORDERS"@LOCAL AS "_A4" ON true ) ALIAS "_A8" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A3" ON true ) ALIAS "_A9" INNER JOIN "PUBLIC"."SUPPLIER"@LOCAL AS "_A2" ON "_A2"."S_SUPPKEY" = "_A3"."L_SUPPKEY") ALIAS "_A10" INNER JOIN "PUBLIC"."NATION"@LOCAL AS "_A1" ON "_A1"."N_NATIONKEY" = "_A2"."S_NATIONKEY") ALIAS "_A11" WHERE "_A6"."N_NAME" = :_V0 AND "_A5"."C_NATIONKEY" = "_A6"."N_NATIONKEY" AND "_A4"."O_CUSTKEY" = "_A5"."C_CUSTKEY" AND "_A3"."L_ORDERKEY" = "_A4"."O_ORDERKEY" AND "_A3"."L_SHIPDATE" >= :_V1 AND "_A3"."L_SHIPDATE" <= :_V2 AND "_A1"."N_NAME" = :_V3
+           TARGET DOMAIN : G1(G1N1) 1494 rows, G2(G2N1) 1520 rows
+     6  -  JOINED COLUMN : N1.N_NAME, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+     7  -  JOINED COLUMN : SUPPLIER.S_NATIONKEY, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+     8  -  JOINED COLUMN : LINEITEM.L_SUPPKEY, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+     9  -  JOINED COLUMN : ORDERS.O_ORDERKEY, N2.N_NAME
+    10  -  JOINED COLUMN : CUSTOMER.C_CUSTKEY, N2.N_NAME
+    11  -  CLONED 
+           READ COLUMN : N2.N_NATIONKEY, N2.N_NAME
+             PHYSICAL FILTER : N2.N_NAME = 'GERMANY'
+    12  -  CLONED 
+           READ INDEX COLUMN : CUSTOMER.C_NATIONKEY
+           READ TABLE COLUMN : CUSTOMER.C_CUSTKEY
+             MIN RANGE : CUSTOMER.C_NATIONKEY = {N2.N_NATIONKEY}
+             MAX RANGE : CUSTOMER.C_NATIONKEY = {N2.N_NATIONKEY}
+    13  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : ORDERS.O_CUSTKEY
+           READ TABLE COLUMN : ORDERS.O_ORDERKEY
+             MIN RANGE : ORDERS.O_CUSTKEY = {CUSTOMER.C_CUSTKEY}
+             MAX RANGE : ORDERS.O_CUSTKEY = {CUSTOMER.C_CUSTKEY}
+    14  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : LINEITEM.L_ORDERKEY
+           READ TABLE COLUMN : LINEITEM.L_SUPPKEY, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT, LINEITEM.L_SHIPDATE
+             MIN RANGE : LINEITEM.L_ORDERKEY = {ORDERS.O_ORDERKEY}
+             MAX RANGE : LINEITEM.L_ORDERKEY = {ORDERS.O_ORDERKEY}
+             PHYSICAL TABLE FILTER : LINEITEM.L_SHIPDATE >= DATE'1995-01-01' AND LINEITEM.L_SHIPDATE <= DATE'1996-12-31'
+    15  -  HASH KEY : SUPPLIER.S_SUPPKEY
+           RECORD COLUMN : SUPPLIER.S_NATIONKEY
+           READ KEY COLUMN : SUPPLIER.S_SUPPKEY, SUPPLIER.S_NATIONKEY
+             HASH FILTER : SUPPLIER.S_SUPPKEY = LINEITEM.L_SUPPKEY
+           FETCH ONE ROW
+    16  -  CLONED 
+           READ COLUMN : SUPPLIER.S_SUPPKEY, SUPPLIER.S_NATIONKEY
+    17  -  HASH KEY : N1.N_NATIONKEY
+           RECORD COLUMN : N1.N_NAME
+           READ KEY COLUMN : N1.N_NATIONKEY, N1.N_NAME
+             HASH FILTER : N1.N_NATIONKEY = SUPPLIER.S_NATIONKEY
+           FETCH ONE ROW
+    18  -  CLONED 
+           READ COLUMN : N1.N_NATIONKEY, N1.N_NAME
+             PHYSICAL FILTER : N1.N_NAME = 'FRANCE'
+    19  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_HASH_IN( _A1, 1 ) USE_HASH_IN( _A2, 10000 ) USE_NL_IN( _A3 ) USE_NL_IN( _A4 ) USE_NL_IN( _A5 ) FULL( _A6 ) INDEX( _A5, "PUBLIC"."CUSTOMER_NATIONKEY_FK" ) INDEX( _A4, "PUBLIC"."ORDERS_CUSTKEY_FK" ) INDEX( _A3, "PUBLIC"."LINEITEM_ORDERKEY_FK" ) FULL( _A2 ) FULL( _A1 ) */ "_A1"."N_NAME", "_A6"."N_NAME", "_A3"."L_SHIPDATE", "_A3"."L_EXTENDEDPRICE", "_A3"."L_DISCOUNT" FROM ( ( ( ( ( "PUBLIC"."NATION"@LOCAL AS "_A6" INNER JOIN "PUBLIC"."CUSTOMER"@LOCAL AS "_A5" ON true ) ALIAS "_A7" INNER JOIN "PUBLIC"."ORDERS"@LOCAL AS "_A4" ON true ) ALIAS "_A8" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A3" ON true ) ALIAS "_A9" INNER JOIN "PUBLIC"."SUPPLIER"@LOCAL AS "_A2" ON "_A2"."S_SUPPKEY" = "_A3"."L_SUPPKEY") ALIAS "_A10" INNER JOIN "PUBLIC"."NATION"@LOCAL AS "_A1" ON "_A1"."N_NATIONKEY" = "_A2"."S_NATIONKEY") ALIAS "_A11" WHERE "_A6"."N_NAME" = :_V0 AND "_A5"."C_NATIONKEY" = "_A6"."N_NATIONKEY" AND "_A4"."O_CUSTKEY" = "_A5"."C_CUSTKEY" AND "_A3"."L_ORDERKEY" = "_A4"."O_ORDERKEY" AND "_A3"."L_SHIPDATE" >= :_V1 AND "_A3"."L_SHIPDATE" <= :_V2 AND "_A1"."N_NAME" = :_V3
+           TARGET DOMAIN : G1(G1N1) 1445 rows, G2(G2N1) 1465 rows
+    20  -  JOINED COLUMN : N1.N_NAME, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+    21  -  JOINED COLUMN : SUPPLIER.S_NATIONKEY, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+    22  -  JOINED COLUMN : LINEITEM.L_SUPPKEY, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+    23  -  JOINED COLUMN : ORDERS.O_ORDERKEY, N2.N_NAME
+    24  -  JOINED COLUMN : CUSTOMER.C_CUSTKEY, N2.N_NAME
+    25  -  CLONED 
+           READ COLUMN : N2.N_NATIONKEY, N2.N_NAME
+             PHYSICAL FILTER : N2.N_NAME = 'FRANCE'
+    26  -  CLONED 
+           READ INDEX COLUMN : CUSTOMER.C_NATIONKEY
+           READ TABLE COLUMN : CUSTOMER.C_CUSTKEY
+             MIN RANGE : CUSTOMER.C_NATIONKEY = {N2.N_NATIONKEY}
+             MAX RANGE : CUSTOMER.C_NATIONKEY = {N2.N_NATIONKEY}
+    27  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : ORDERS.O_CUSTKEY
+           READ TABLE COLUMN : ORDERS.O_ORDERKEY
+             MIN RANGE : ORDERS.O_CUSTKEY = {CUSTOMER.C_CUSTKEY}
+             MAX RANGE : ORDERS.O_CUSTKEY = {CUSTOMER.C_CUSTKEY}
+    28  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : LINEITEM.L_ORDERKEY
+           READ TABLE COLUMN : LINEITEM.L_SUPPKEY, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT, LINEITEM.L_SHIPDATE
+             MIN RANGE : LINEITEM.L_ORDERKEY = {ORDERS.O_ORDERKEY}
+             MAX RANGE : LINEITEM.L_ORDERKEY = {ORDERS.O_ORDERKEY}
+             PHYSICAL TABLE FILTER : LINEITEM.L_SHIPDATE >= DATE'1995-01-01' AND LINEITEM.L_SHIPDATE <= DATE'1996-12-31'
+    29  -  HASH KEY : SUPPLIER.S_SUPPKEY
+           RECORD COLUMN : SUPPLIER.S_NATIONKEY
+           READ KEY COLUMN : SUPPLIER.S_SUPPKEY, SUPPLIER.S_NATIONKEY
+             HASH FILTER : SUPPLIER.S_SUPPKEY = LINEITEM.L_SUPPKEY
+           FETCH ONE ROW
+    30  -  CLONED 
+           READ COLUMN : SUPPLIER.S_SUPPKEY, SUPPLIER.S_NATIONKEY
+    31  -  HASH KEY : N1.N_NATIONKEY
+           RECORD COLUMN : N1.N_NAME
+           READ KEY COLUMN : N1.N_NATIONKEY, N1.N_NAME
+             HASH FILTER : N1.N_NATIONKEY = SUPPLIER.S_NATIONKEY
+           FETCH ONE ROW
+    32  -  CLONED 
+           READ COLUMN : N1.N_NATIONKEY, N1.N_NAME
+             PHYSICAL FILTER : N1.N_NAME = 'GERMANY'
+
+<<<  end print plan
+
+
+
+--###############################
+--# Functional Query Definition
+--###############################
+
+\set linesize 400
+\set timing on;
+
+--# result: 4 rows
+--#         supp_nation        |        cust_nation        | l_year |   revenue   
+--# ---------------------------+---------------------------+--------+-------------
+--#  FRANCE                    | GERMANY                   |   1995 | 54639732.73
+--#  FRANCE                    | GERMANY                   |   1996 | 54633083.31
+--#  GERMANY                   | FRANCE                    |   1995 | 52531746.67
+--#  GERMANY                   | FRANCE                    |   1996 | 52520549.02
+\explain plan
+select
+    supp_nation,
+    cust_nation,
+    l_year, 
+    ROUND( sum(volume), 2 ) as revenue
+from (
+       select
+           n1.n_name as supp_nation,
+           n2.n_name as cust_nation,
+           extract(year from l_shipdate) as l_year,
+           l_extendedprice * (1 - l_discount) as volume
+       from
+           supplier,
+           lineitem,
+           orders,
+           customer,
+           nation n1,
+           nation n2
+       where
+             s_suppkey = l_suppkey
+         and o_orderkey = l_orderkey
+         and c_custkey = o_custkey
+         and s_nationkey = n1.n_nationkey
+         and c_nationkey = n2.n_nationkey
+         and (
+               (n1.n_name = 'FRANCE' and n2.n_name = 'GERMANY')
+               or (n1.n_name = 'GERMANY' and n2.n_name = 'FRANCE')
+             )
+         and l_shipdate between date '1995-01-01' and date '1996-12-31'
+     ) shipping
+group by
+    supp_nation,
+    cust_nation,
+    l_year
+order by
+    supp_nation,
+    cust_nation,
+    l_year;
+
+SUPP_NATION               CUST_NATION               L_YEAR     REVENUE
+------------------------- ------------------------- ------ -----------
+FRANCE                    GERMANY                     1995 54639732.73
+FRANCE                    GERMANY                     1996 54633083.31
+GERMANY                   FRANCE                      1995 52531746.67
+GERMANY                   FRANCE                      1996 52520549.02
+
+4 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+=================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                           |                    ROWS |
+-----------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                           |                       4 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                |                       4 |
+|    2  |      SORT INSTANT                                                           |                       4 |
+|    3  |        GROUP HASH INSTANT                                                   |                       4 |
+|    4  |          CONCAT (Compare Nothing)                                           |                    5924 |
+|    5  |            PLAN BASED CLUSTER                                               | LOCAL/REMOTE       3014 |
+|    6  |              HASH JOIN (INNER JOIN)                                         |                    1494 |
+|    7  |                HASH JOIN (INNER JOIN)                                       |                   36535 |
+|    8  |                  NESTED JOIN (INNER JOIN)                                   |                   36535 |
+|    9  |                    NESTED JOIN (INNER JOIN)                                 |                   29862 |
+|   10  |                      NESTED JOIN (INNER JOIN)                               |                    5908 |
+|   11  |                        TABLE ACCESS ("NATION" AS N2)                        |                       1 |
+|   12  |                        INDEX ACCESS ("CUSTOMER", "CUSTOMER_NATIONKEY_FK")   | (      5908)       5908 |
+|   13  |                      INDEX ACCESS ("ORDERS", "ORDERS_CUSTKEY_FK")           | (     29862)      29862 |
+|   14  |                    INDEX ACCESS ("LINEITEM", "LINEITEM_ORDERKEY_FK")        | (    119760)      36535 |
+|   15  |                  HASH JOIN INSTANT                                          |                   36535 |
+|   16  |                    TABLE ACCESS ("SUPPLIER")                                |                   10000 |
+|   17  |                HASH JOIN INSTANT                                            |                    1494 |
+|   18  |                  TABLE ACCESS ("NATION" AS N1)                              |                       1 |
+|   19  |            PLAN BASED CLUSTER                                               | LOCAL/REMOTE       2910 |
+|   20  |              HASH JOIN (INNER JOIN)                                         |                    1445 |
+|   21  |                HASH JOIN (INNER JOIN)                                       |                   37688 |
+|   22  |                  NESTED JOIN (INNER JOIN)                                   |                   37688 |
+|   23  |                    NESTED JOIN (INNER JOIN)                                 |                   30835 |
+|   24  |                      NESTED JOIN (INNER JOIN)                               |                    6100 |
+|   25  |                        TABLE ACCESS ("NATION" AS N2)                        |                       1 |
+|   26  |                        INDEX ACCESS ("CUSTOMER", "CUSTOMER_NATIONKEY_FK")   | (      6100)       6100 |
+|   27  |                      INDEX ACCESS ("ORDERS", "ORDERS_CUSTKEY_FK")           | (     30835)      30835 |
+|   28  |                    INDEX ACCESS ("LINEITEM", "LINEITEM_ORDERKEY_FK")        | (    123281)      37688 |
+|   29  |                  HASH JOIN INSTANT                                          |                   37688 |
+|   30  |                    TABLE ACCESS ("SUPPLIER")                                |                   10000 |
+|   31  |                HASH JOIN INSTANT                                            |                    1445 |
+|   32  |                  TABLE ACCESS ("NATION" AS N1)                              |                       1 |
+=================================================================================================================
+
+     1  -  TARGET : N1.N_NAME, N2.N_NAME, EXTRACT( YEAR FROM LINEITEM.L_SHIPDATE ), ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2) AS REVENUE
+     2  -  SORT KEY : "N1.N_NAME ASC NULLS LAST", "N2.N_NAME ASC NULLS LAST", "EXTRACT( YEAR FROM LINEITEM.L_SHIPDATE ) ASC NULLS LAST"
+           RECORD COLUMN : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2)
+           READ KEY COLUMN : N1.N_NAME, N2.N_NAME, EXTRACT( YEAR FROM LINEITEM.L_SHIPDATE )
+           READ RECORD COLUMN : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2)
+     3  -  GROUP KEY : N1.N_NAME, N2.N_NAME, EXTRACT( YEAR FROM LINEITEM.L_SHIPDATE )
+           RECORD COLUMN : SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) )
+           READ KEY COLUMN : N1.N_NAME, N2.N_NAME, EXTRACT( YEAR FROM LINEITEM.L_SHIPDATE )
+           READ RECORD COLUMN : SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) )
+     4  -  CONCAT COLUMN : N1.N_NAME, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+     5  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_HASH_IN( _A1, 1 ) USE_HASH_IN( _A2, 10000 ) USE_NL_IN( _A3 ) USE_NL_IN( _A4 ) USE_NL_IN( _A5 ) FULL( _A6 ) INDEX( _A5, "PUBLIC"."CUSTOMER_NATIONKEY_FK" ) INDEX( _A4, "PUBLIC"."ORDERS_CUSTKEY_FK" ) INDEX( _A3, "PUBLIC"."LINEITEM_ORDERKEY_FK" ) FULL( _A2 ) FULL( _A1 ) */ "_A1"."N_NAME", "_A6"."N_NAME", "_A3"."L_SHIPDATE", "_A3"."L_EXTENDEDPRICE", "_A3"."L_DISCOUNT" FROM ( ( ( ( ( "PUBLIC"."NATION"@LOCAL AS "_A6" INNER JOIN "PUBLIC"."CUSTOMER"@LOCAL AS "_A5" ON true ) ALIAS "_A7" INNER JOIN "PUBLIC"."ORDERS"@LOCAL AS "_A4" ON true ) ALIAS "_A8" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A3" ON true ) ALIAS "_A9" INNER JOIN "PUBLIC"."SUPPLIER"@LOCAL AS "_A2" ON "_A2"."S_SUPPKEY" = "_A3"."L_SUPPKEY") ALIAS "_A10" INNER JOIN "PUBLIC"."NATION"@LOCAL AS "_A1" ON "_A1"."N_NATIONKEY" = "_A2"."S_NATIONKEY") ALIAS "_A11" WHERE "_A6"."N_NAME" = :_V0 AND "_A5"."C_NATIONKEY" = "_A6"."N_NATIONKEY" AND "_A4"."O_CUSTKEY" = "_A5"."C_CUSTKEY" AND "_A3"."L_ORDERKEY" = "_A4"."O_ORDERKEY" AND "_A3"."L_SHIPDATE" >= :_V1 AND "_A3"."L_SHIPDATE" <= :_V2 AND "_A1"."N_NAME" = :_V3
+           TARGET DOMAIN : G1(G1N1) 1494 rows, G2(G2N1) 1520 rows
+     6  -  JOINED COLUMN : N1.N_NAME, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+     7  -  JOINED COLUMN : SUPPLIER.S_NATIONKEY, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+     8  -  JOINED COLUMN : LINEITEM.L_SUPPKEY, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+     9  -  JOINED COLUMN : ORDERS.O_ORDERKEY, N2.N_NAME
+    10  -  JOINED COLUMN : CUSTOMER.C_CUSTKEY, N2.N_NAME
+    11  -  CLONED 
+           READ COLUMN : N2.N_NATIONKEY, N2.N_NAME
+             PHYSICAL FILTER : N2.N_NAME = 'GERMANY'
+    12  -  CLONED 
+           READ INDEX COLUMN : CUSTOMER.C_NATIONKEY
+           READ TABLE COLUMN : CUSTOMER.C_CUSTKEY
+             MIN RANGE : CUSTOMER.C_NATIONKEY = {N2.N_NATIONKEY}
+             MAX RANGE : CUSTOMER.C_NATIONKEY = {N2.N_NATIONKEY}
+    13  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : ORDERS.O_CUSTKEY
+           READ TABLE COLUMN : ORDERS.O_ORDERKEY
+             MIN RANGE : ORDERS.O_CUSTKEY = {CUSTOMER.C_CUSTKEY}
+             MAX RANGE : ORDERS.O_CUSTKEY = {CUSTOMER.C_CUSTKEY}
+    14  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : LINEITEM.L_ORDERKEY
+           READ TABLE COLUMN : LINEITEM.L_SUPPKEY, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT, LINEITEM.L_SHIPDATE
+             MIN RANGE : LINEITEM.L_ORDERKEY = {ORDERS.O_ORDERKEY}
+             MAX RANGE : LINEITEM.L_ORDERKEY = {ORDERS.O_ORDERKEY}
+             PHYSICAL TABLE FILTER : LINEITEM.L_SHIPDATE >= DATE'1995-01-01' AND LINEITEM.L_SHIPDATE <= DATE'1996-12-31'
+    15  -  HASH KEY : SUPPLIER.S_SUPPKEY
+           RECORD COLUMN : SUPPLIER.S_NATIONKEY
+           READ KEY COLUMN : SUPPLIER.S_SUPPKEY, SUPPLIER.S_NATIONKEY
+             HASH FILTER : SUPPLIER.S_SUPPKEY = LINEITEM.L_SUPPKEY
+           FETCH ONE ROW
+    16  -  CLONED 
+           READ COLUMN : SUPPLIER.S_SUPPKEY, SUPPLIER.S_NATIONKEY
+    17  -  HASH KEY : N1.N_NATIONKEY
+           RECORD COLUMN : N1.N_NAME
+           READ KEY COLUMN : N1.N_NATIONKEY, N1.N_NAME
+             HASH FILTER : N1.N_NATIONKEY = SUPPLIER.S_NATIONKEY
+           FETCH ONE ROW
+    18  -  CLONED 
+           READ COLUMN : N1.N_NATIONKEY, N1.N_NAME
+             PHYSICAL FILTER : N1.N_NAME = 'FRANCE'
+    19  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_HASH_IN( _A1, 1 ) USE_HASH_IN( _A2, 10000 ) USE_NL_IN( _A3 ) USE_NL_IN( _A4 ) USE_NL_IN( _A5 ) FULL( _A6 ) INDEX( _A5, "PUBLIC"."CUSTOMER_NATIONKEY_FK" ) INDEX( _A4, "PUBLIC"."ORDERS_CUSTKEY_FK" ) INDEX( _A3, "PUBLIC"."LINEITEM_ORDERKEY_FK" ) FULL( _A2 ) FULL( _A1 ) */ "_A1"."N_NAME", "_A6"."N_NAME", "_A3"."L_SHIPDATE", "_A3"."L_EXTENDEDPRICE", "_A3"."L_DISCOUNT" FROM ( ( ( ( ( "PUBLIC"."NATION"@LOCAL AS "_A6" INNER JOIN "PUBLIC"."CUSTOMER"@LOCAL AS "_A5" ON true ) ALIAS "_A7" INNER JOIN "PUBLIC"."ORDERS"@LOCAL AS "_A4" ON true ) ALIAS "_A8" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A3" ON true ) ALIAS "_A9" INNER JOIN "PUBLIC"."SUPPLIER"@LOCAL AS "_A2" ON "_A2"."S_SUPPKEY" = "_A3"."L_SUPPKEY") ALIAS "_A10" INNER JOIN "PUBLIC"."NATION"@LOCAL AS "_A1" ON "_A1"."N_NATIONKEY" = "_A2"."S_NATIONKEY") ALIAS "_A11" WHERE "_A6"."N_NAME" = :_V0 AND "_A5"."C_NATIONKEY" = "_A6"."N_NATIONKEY" AND "_A4"."O_CUSTKEY" = "_A5"."C_CUSTKEY" AND "_A3"."L_ORDERKEY" = "_A4"."O_ORDERKEY" AND "_A3"."L_SHIPDATE" >= :_V1 AND "_A3"."L_SHIPDATE" <= :_V2 AND "_A1"."N_NAME" = :_V3
+           TARGET DOMAIN : G1(G1N1) 1445 rows, G2(G2N1) 1465 rows
+    20  -  JOINED COLUMN : N1.N_NAME, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+    21  -  JOINED COLUMN : SUPPLIER.S_NATIONKEY, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+    22  -  JOINED COLUMN : LINEITEM.L_SUPPKEY, N2.N_NAME, LINEITEM.L_SHIPDATE, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+    23  -  JOINED COLUMN : ORDERS.O_ORDERKEY, N2.N_NAME
+    24  -  JOINED COLUMN : CUSTOMER.C_CUSTKEY, N2.N_NAME
+    25  -  CLONED 
+           READ COLUMN : N2.N_NATIONKEY, N2.N_NAME
+             PHYSICAL FILTER : N2.N_NAME = 'FRANCE'
+    26  -  CLONED 
+           READ INDEX COLUMN : CUSTOMER.C_NATIONKEY
+           READ TABLE COLUMN : CUSTOMER.C_CUSTKEY
+             MIN RANGE : CUSTOMER.C_NATIONKEY = {N2.N_NATIONKEY}
+             MAX RANGE : CUSTOMER.C_NATIONKEY = {N2.N_NATIONKEY}
+    27  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : ORDERS.O_CUSTKEY
+           READ TABLE COLUMN : ORDERS.O_ORDERKEY
+             MIN RANGE : ORDERS.O_CUSTKEY = {CUSTOMER.C_CUSTKEY}
+             MAX RANGE : ORDERS.O_CUSTKEY = {CUSTOMER.C_CUSTKEY}
+    28  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : LINEITEM.L_ORDERKEY
+           READ TABLE COLUMN : LINEITEM.L_SUPPKEY, LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT, LINEITEM.L_SHIPDATE
+             MIN RANGE : LINEITEM.L_ORDERKEY = {ORDERS.O_ORDERKEY}
+             MAX RANGE : LINEITEM.L_ORDERKEY = {ORDERS.O_ORDERKEY}
+             PHYSICAL TABLE FILTER : LINEITEM.L_SHIPDATE >= DATE'1995-01-01' AND LINEITEM.L_SHIPDATE <= DATE'1996-12-31'
+    29  -  HASH KEY : SUPPLIER.S_SUPPKEY
+           RECORD COLUMN : SUPPLIER.S_NATIONKEY
+           READ KEY COLUMN : SUPPLIER.S_SUPPKEY, SUPPLIER.S_NATIONKEY
+             HASH FILTER : SUPPLIER.S_SUPPKEY = LINEITEM.L_SUPPKEY
+           FETCH ONE ROW
+    30  -  CLONED 
+           READ COLUMN : SUPPLIER.S_SUPPKEY, SUPPLIER.S_NATIONKEY
+    31  -  HASH KEY : N1.N_NATIONKEY
+           RECORD COLUMN : N1.N_NAME
+           READ KEY COLUMN : N1.N_NATIONKEY, N1.N_NAME
+             HASH FILTER : N1.N_NATIONKEY = SUPPLIER.S_NATIONKEY
+           FETCH ONE ROW
+    32  -  CLONED 
+           READ COLUMN : N1.N_NATIONKEY, N1.N_NAME
+             PHYSICAL FILTER : N1.N_NAME = 'GERMANY'
+
+<<<  end print plan
+
+
+Elapsed time: 573.91400 ms 
+
+
+--#################################
+--# Report
+--#################################
+
+\set timing off;
+
+INSERT INTO TPCH_SF1_REPORT 
+       VALUES ( 'SF1_Q07', (:VAR_ELAPSED_TIME__ / 1000), TRUNC( 60 * 60 * 1000 / :VAR_ELAPSED_TIME__, 0 ) );
+
+1 row created.
+
+COMMIT;
+
+Commit complete.
+

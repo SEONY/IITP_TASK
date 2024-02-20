@@ -1,0 +1,277 @@
+--####################################################################
+--# Global Sales Opportunity Query (Q22)
+--####################################################################
+
+--# The Global Sales Opportunity Query identifies geographies 
+--# where there are customers who may be likely to make a purchase.
+
+--###############################
+--# Business Question
+--###############################
+
+--# This query counts how many customers within a specific range 
+--# of country codes have not placed orders for 7 years but 
+--# who have a greater than average “positive” account balance. 
+--# It also reflects the magnitude of that balance. 
+--# Country code is defined as the first two characters of c_phone.
+
+\explain plan
+select
+    cntrycode,
+    count(*) as numcust,
+    sum(c_acctbal) as totacctbal
+from (
+       select
+           substr(c_phone, 1, 2) as cntrycode,
+           c_acctbal
+       from
+           customer
+       where
+             substr(c_phone, 1, 2) in
+                ('13','31','23','29','30','18','17')
+         and c_acctbal > (
+                           select
+                               avg(c_acctbal)
+                           from
+                               customer
+                           where
+                                 c_acctbal > 0.00
+                             and substr(c_phone, 1, 2) in
+                                ('13','31','23','29','30','18','17')
+                         )
+         and not exists (
+                          select
+                              *
+                          from
+                              orders
+                          where
+                              o_custkey = c_custkey
+                        )
+     ) custsale
+group by
+    cntrycode
+order by
+    cntrycode;
+
+CNTRYCODE NUMCUST TOTACCTBAL
+--------- ------- ----------
+13            888 6737713.99
+17            861 6460573.72
+18            964  7236687.4
+23            892 6701457.95
+29            948 7158866.63
+30            909 6808436.13
+31            922 6806670.18
+
+7 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+==============================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                        |                    ROWS |
+--------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                        |                       7 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                             |                       7 |
+|    2  |      SORT INSTANT                                                        |                       7 |
+|    3  |        GROUP HASH INSTANT                                                |                       7 |
+|    4  |          MULTIPLE CLUSTER                                                | LOCAL/REMOTE       6384 |
+|    5  |            SELECT STATEMENT                                              |                    6432 |
+|    6  |              QUERY BLOCK ("$QB_IDX_2")                                   |                    6432 |
+|    7  |                SORT INSTANT                                              |                    6432 |
+|    8  |                  NESTED JOIN (ANTI SEMI)                                 |                    6432 |
+|    9  |                    TABLE ACCESS ("CUSTOMER" AS _A2)                      |                   19000 |
+|   10  |                    INDEX ACCESS ("ORDERS" AS _A1, "ORDERS_CUSTKEY_FK")   | (     12568)      12568 |
+|   11  |  SUB QUERY LIST                                                          |                         |
+|   12  |    INLINE_VIEW ("$V9")                                                   |                       1 |
+|   13  |      QUERY BLOCK ("$QB_IDX_9")                                           |                       1 |
+|   14  |        TABLE ACCESS ("CUSTOMER")                                         |                       1 |
+==============================================================================================================
+
+     1  -  TARGET : SUBSTRING(CUSTOMER.C_PHONE,1,2), COUNT(*) AS NUMCUST, SUM( CUSTOMER.C_ACCTBAL ) AS TOTACCTBAL
+     2  -  SORT KEY : "SUBSTRING(CUSTOMER.C_PHONE,1,2) ASC NULLS LAST"
+           RECORD COLUMN : COUNT(*), SUM( CUSTOMER.C_ACCTBAL )
+           READ KEY COLUMN : SUBSTRING(CUSTOMER.C_PHONE,1,2)
+           READ RECORD COLUMN : COUNT(*), SUM( CUSTOMER.C_ACCTBAL )
+     3  -  GROUP KEY : SUBSTRING(CUSTOMER.C_PHONE,1,2)
+           RECORD COLUMN : COUNT(*), SUM( CUSTOMER.C_ACCTBAL )
+           READ KEY COLUMN : SUBSTRING(CUSTOMER.C_PHONE,1,2)
+           READ RECORD COLUMN : COUNT(*), SUM( CUSTOMER.C_ACCTBAL )
+     4  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."ORDERS_CUSTKEY_FK" ) */ "_A2"."C_CUSTKEY", "_A2"."C_PHONE", "_A2"."C_ACCTBAL" FROM ( "PUBLIC"."CUSTOMER"@"G1N1"|"G2N1" AS "_A2" ANTI SEMI JOIN "PUBLIC"."ORDERS"@"G1N1"|"G2N1" AS "_A1" ON "_A1"."O_CUSTKEY" = "_A2"."C_CUSTKEY") ALIAS "_A3" WHERE "_A2"."C_ACCTBAL" > :_V0 AND (SUBSTRING("_A2"."C_PHONE",:_V1,:_V2)) IN (:_V3,:_V4,:_V5,:_V6,:_V7,:_V8,:_V9) ORDER BY "_A2"."C_CUSTKEY" ASC NULLS LAST
+           TARGET DOMAIN : G1(G1N1) 6432 rows, G2(G2N1) 6414 rows
+           INTERSECT KEY GROUP
+             KEY GROUP : CUSTOMER.C_CUSTKEY
+     6  -  TARGET : _A2.C_CUSTKEY, _A2.C_PHONE, _A2.C_ACCTBAL
+     7  -  SORT KEY : "_A2.C_CUSTKEY ASC NULLS LAST"
+           RECORD COLUMN : _A2.C_PHONE, _A2.C_ACCTBAL
+           READ KEY COLUMN : _A2.C_CUSTKEY
+           READ RECORD COLUMN : _A2.C_PHONE, _A2.C_ACCTBAL
+     8  -  JOINED COLUMN : _A2.C_CUSTKEY, _A2.C_PHONE, _A2.C_ACCTBAL
+     9  -  CLONED 
+           READ COLUMN : _A2.C_CUSTKEY, _A2.C_PHONE, _A2.C_ACCTBAL
+             PHYSICAL FILTER : _A2.C_ACCTBAL > :_V0
+             LOGICAL FILTER : ( SUBSTRING(_A2.C_PHONE,:_V1,:_V2) ) IN_HASH ( :_V3, :_V4, :_V5, :_V6, :_V7, :_V8, :_V9 )
+    10  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.O_CUSTKEY
+             MIN RANGE : _A1.O_CUSTKEY = {_A2.C_CUSTKEY}
+             MAX RANGE : _A1.O_CUSTKEY = {_A2.C_CUSTKEY}
+    12  -  COLUMN : SUM( CUSTOMER.C_ACCTBAL ) / COUNT( CUSTOMER.C_ACCTBAL ) AS $C0
+    13  -  TARGET : SUM( CUSTOMER.C_ACCTBAL ) / COUNT( CUSTOMER.C_ACCTBAL )
+    14  -  CLONED 
+           READ COLUMN : CUSTOMER.C_PHONE, CUSTOMER.C_ACCTBAL
+           AGGREGATION : SUM( CUSTOMER.C_ACCTBAL ), COUNT( CUSTOMER.C_ACCTBAL )
+             PHYSICAL FILTER : CUSTOMER.C_ACCTBAL > 0.00
+             LOGICAL FILTER : ( SUBSTRING(CUSTOMER.C_PHONE,1,2) ) IN_HASH ( '13', '31', '23', '29', '30', '18', '17' )
+
+<<<  end print plan
+
+
+
+--###############################
+--# Functional Query Definition
+--###############################
+
+\set linesize 400
+\set timing on;
+
+--# result: 7 rows
+--#  cntrycode | numcust | totacctbal 
+--# -----------+---------+------------
+--#  13        |     888 | 6737713.99
+--#  17        |     861 | 6460573.72
+--#  18        |     964 | 7236687.40
+--#  23        |     892 | 6701457.95
+--#  29        |     948 | 7158866.63
+--#  30        |     909 | 6808436.13
+--#  31        |     922 | 6806670.18
+
+\explain plan
+select
+    cntrycode,
+    count(*) as numcust,
+    sum(c_acctbal) as totacctbal
+from (
+       select
+           substr(c_phone, 1, 2) as cntrycode,
+           c_acctbal
+       from
+           customer
+       where
+             substr(c_phone, 1, 2) in
+                ('13','31','23','29','30','18','17')
+         and c_acctbal > (
+                           select
+                               avg(c_acctbal)
+                           from
+                               customer
+                           where
+                                 c_acctbal > 0.00
+                             and substr(c_phone, 1, 2) in
+                                ('13','31','23','29','30','18','17')
+                         )
+         and not exists (
+                          select
+                              *
+                          from
+                              orders
+                          where
+                              o_custkey = c_custkey
+                        )
+     ) custsale
+group by
+    cntrycode
+order by
+    cntrycode;
+
+CNTRYCODE NUMCUST TOTACCTBAL
+--------- ------- ----------
+13            888 6737713.99
+17            861 6460573.72
+18            964  7236687.4
+23            892 6701457.95
+29            948 7158866.63
+30            909 6808436.13
+31            922 6806670.18
+
+7 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+==============================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                        |                    ROWS |
+--------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                        |                       7 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                             |                       7 |
+|    2  |      SORT INSTANT                                                        |                       7 |
+|    3  |        GROUP HASH INSTANT                                                |                       7 |
+|    4  |          MULTIPLE CLUSTER                                                | LOCAL/REMOTE       6384 |
+|    5  |            SELECT STATEMENT                                              |                    6432 |
+|    6  |              QUERY BLOCK ("$QB_IDX_2")                                   |                    6432 |
+|    7  |                SORT INSTANT                                              |                    6432 |
+|    8  |                  NESTED JOIN (ANTI SEMI)                                 |                    6432 |
+|    9  |                    TABLE ACCESS ("CUSTOMER" AS _A2)                      |                   19000 |
+|   10  |                    INDEX ACCESS ("ORDERS" AS _A1, "ORDERS_CUSTKEY_FK")   | (     12568)      12568 |
+|   11  |  SUB QUERY LIST                                                          |                         |
+|   12  |    INLINE_VIEW ("$V9")                                                   |                       1 |
+|   13  |      QUERY BLOCK ("$QB_IDX_9")                                           |                       1 |
+|   14  |        TABLE ACCESS ("CUSTOMER")                                         |                       1 |
+==============================================================================================================
+
+     1  -  TARGET : SUBSTRING(CUSTOMER.C_PHONE,1,2), COUNT(*) AS NUMCUST, SUM( CUSTOMER.C_ACCTBAL ) AS TOTACCTBAL
+     2  -  SORT KEY : "SUBSTRING(CUSTOMER.C_PHONE,1,2) ASC NULLS LAST"
+           RECORD COLUMN : COUNT(*), SUM( CUSTOMER.C_ACCTBAL )
+           READ KEY COLUMN : SUBSTRING(CUSTOMER.C_PHONE,1,2)
+           READ RECORD COLUMN : COUNT(*), SUM( CUSTOMER.C_ACCTBAL )
+     3  -  GROUP KEY : SUBSTRING(CUSTOMER.C_PHONE,1,2)
+           RECORD COLUMN : COUNT(*), SUM( CUSTOMER.C_ACCTBAL )
+           READ KEY COLUMN : SUBSTRING(CUSTOMER.C_PHONE,1,2)
+           READ RECORD COLUMN : COUNT(*), SUM( CUSTOMER.C_ACCTBAL )
+     4  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."ORDERS_CUSTKEY_FK" ) */ "_A2"."C_CUSTKEY", "_A2"."C_PHONE", "_A2"."C_ACCTBAL" FROM ( "PUBLIC"."CUSTOMER"@"G1N1"|"G2N1" AS "_A2" ANTI SEMI JOIN "PUBLIC"."ORDERS"@"G1N1"|"G2N1" AS "_A1" ON "_A1"."O_CUSTKEY" = "_A2"."C_CUSTKEY") ALIAS "_A3" WHERE "_A2"."C_ACCTBAL" > :_V0 AND (SUBSTRING("_A2"."C_PHONE",:_V1,:_V2)) IN (:_V3,:_V4,:_V5,:_V6,:_V7,:_V8,:_V9) ORDER BY "_A2"."C_CUSTKEY" ASC NULLS LAST
+           TARGET DOMAIN : G1(G1N1) 6432 rows, G2(G2N1) 6414 rows
+           INTERSECT KEY GROUP
+             KEY GROUP : CUSTOMER.C_CUSTKEY
+     6  -  TARGET : _A2.C_CUSTKEY, _A2.C_PHONE, _A2.C_ACCTBAL
+     7  -  SORT KEY : "_A2.C_CUSTKEY ASC NULLS LAST"
+           RECORD COLUMN : _A2.C_PHONE, _A2.C_ACCTBAL
+           READ KEY COLUMN : _A2.C_CUSTKEY
+           READ RECORD COLUMN : _A2.C_PHONE, _A2.C_ACCTBAL
+     8  -  JOINED COLUMN : _A2.C_CUSTKEY, _A2.C_PHONE, _A2.C_ACCTBAL
+     9  -  CLONED 
+           READ COLUMN : _A2.C_CUSTKEY, _A2.C_PHONE, _A2.C_ACCTBAL
+             PHYSICAL FILTER : _A2.C_ACCTBAL > :_V0
+             LOGICAL FILTER : ( SUBSTRING(_A2.C_PHONE,:_V1,:_V2) ) IN_HASH ( :_V3, :_V4, :_V5, :_V6, :_V7, :_V8, :_V9 )
+    10  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.O_CUSTKEY
+             MIN RANGE : _A1.O_CUSTKEY = {_A2.C_CUSTKEY}
+             MAX RANGE : _A1.O_CUSTKEY = {_A2.C_CUSTKEY}
+    12  -  COLUMN : SUM( CUSTOMER.C_ACCTBAL ) / COUNT( CUSTOMER.C_ACCTBAL ) AS $C0
+    13  -  TARGET : SUM( CUSTOMER.C_ACCTBAL ) / COUNT( CUSTOMER.C_ACCTBAL )
+    14  -  CLONED 
+           READ COLUMN : CUSTOMER.C_PHONE, CUSTOMER.C_ACCTBAL
+           AGGREGATION : SUM( CUSTOMER.C_ACCTBAL ), COUNT( CUSTOMER.C_ACCTBAL )
+             PHYSICAL FILTER : CUSTOMER.C_ACCTBAL > 0.00
+             LOGICAL FILTER : ( SUBSTRING(CUSTOMER.C_PHONE,1,2) ) IN_HASH ( '13', '31', '23', '29', '30', '18', '17' )
+
+<<<  end print plan
+
+
+Elapsed time: 111.05800 ms 
+
+
+--#################################
+--# Report
+--#################################
+
+\set timing off;
+
+INSERT INTO TPCH_SF1_REPORT 
+       VALUES ( 'SF1_Q22', (:VAR_ELAPSED_TIME__ / 1000), TRUNC( 60 * 60 * 1000 / :VAR_ELAPSED_TIME__, 0 ) );
+
+1 row created.
+
+COMMIT;
+
+Commit complete.
+
+

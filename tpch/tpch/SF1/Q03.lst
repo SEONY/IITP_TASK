@@ -1,0 +1,259 @@
+--####################################################################
+--# Shipping Priority Query (Q3)
+--####################################################################
+
+--# This query retrieves the 10 unshipped orders with the highest value.
+
+--###############################
+--# Business Question
+--###############################
+
+--# The Shipping Priority Query retrieves the shipping priority 
+--# and potential revenue, defined as 
+--# the sum of l_extendedprice * (1-l_discount), 
+--# of the orders having the largest revenue among those 
+--# that had not been shipped as of a given date. 
+--# Orders are listed in decreasing order of revenue. 
+--# If more than 10 unshipped orders exist, 
+--# only the 10 orders with the largest revenue are listed.
+
+\explain plan
+  select
+      l_orderkey,
+	  ROUND( sum(l_extendedprice*(1-l_discount)), 2) as revenue,
+	  o_orderdate,
+	  o_shippriority
+  from
+      customer,
+	  orders,
+	  lineitem
+  where
+        c_mktsegment = 'BUILDING'
+    and c_custkey = o_custkey
+	and l_orderkey = o_orderkey
+    and o_orderdate < date '1995-03-15'
+	and l_shipdate > date '1995-03-15'
+  group by
+      l_orderkey,
+	  o_orderdate,
+	  o_shippriority
+  order by
+      revenue desc,
+      o_orderdate
+  fetch 10;
+
+L_ORDERKEY   REVENUE O_ORDERDATE O_SHIPPRIORITY
+---------- --------- ----------- --------------
+   2456423 406181.01 1995-03-05               0
+   3459808  405838.7 1995-03-04               0
+    492164 390324.06 1995-02-19               0
+   1188320 384537.94 1995-03-09               0
+   2435712 378673.06 1995-02-26               0
+   4878020  378376.8 1995-03-12               0
+   5521732 375153.92 1995-03-13               0
+   2628192 373133.31 1995-02-22               0
+    993600 371407.46 1995-03-05               0
+   2300070 367371.15 1995-03-13               0
+
+10 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+=================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                           |                    ROWS |
+-----------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                           |                      10 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                |                      10 |
+|    2  |      MULTIPLE CLUSTER                                                       | LOCAL/REMOTE         10 |
+|    3  |        SELECT STATEMENT                                                     |                      10 |
+|    4  |          QUERY BLOCK ("$QB_IDX_2")                                          |                      10 |
+|    5  |            SORT INSTANT                                                     |                      10 |
+|    6  |              GROUP HASH INSTANT                                             |                    5864 |
+|    7  |                NESTED JOIN (INNER JOIN)                                     |                   15360 |
+|    8  |                  HASH JOIN (INNER JOIN)                                     |                   73770 |
+|    9  |                    TABLE ACCESS ("ORDERS" AS _A3)                           |                  365172 |
+|   10  |                    HASH JOIN INSTANT                                        |                   73770 |
+|   11  |                      TABLE ACCESS ("CUSTOMER" AS _A2)                       |                   30142 |
+|   12  |                  INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_ORDERKEY_FK")   | (    295571)      15360 |
+=================================================================================================================
+
+     1  -  TARGET : LINEITEM.L_ORDERKEY, ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2) AS REVENUE, ORDERS.O_ORDERDATE, ORDERS.O_SHIPPRIORITY
+     2  -  SQL : SELECT /*+ USE_ORDER_SORT USE_GROUP_HASH(119118) KEEP_JOINED_TABLE USE_NL_IN( _A1 ) USE_HASH_IN( _A2, 30142 ) FULL( _A3 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_ORDERKEY_FK" ) */ ROUND(SUM( "_A1"."L_EXTENDEDPRICE" * (:_V0 - "_A1"."L_DISCOUNT") ),:_V1), "_A3"."O_ORDERDATE", "_A1"."L_ORDERKEY", "_A3"."O_SHIPPRIORITY" FROM ( ( "PUBLIC"."ORDERS"@LOCAL AS "_A3" INNER JOIN "PUBLIC"."CUSTOMER"@LOCAL AS "_A2" ON "_A2"."C_CUSTKEY" = "_A3"."O_CUSTKEY") ALIAS "_A4" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A1" ON true ) ALIAS "_A5" WHERE "_A3"."O_ORDERDATE" < :_V2 AND "_A2"."C_MKTSEGMENT" = :_V3 AND "_A1"."L_ORDERKEY" = "_A3"."O_ORDERKEY" AND "_A1"."L_SHIPDATE" > :_V2 GROUP BY "_A1"."L_ORDERKEY", "_A3"."O_ORDERDATE", "_A3"."O_SHIPPRIORITY" ORDER BY ROUND(SUM( "_A1"."L_EXTENDEDPRICE" * (:_V0 - "_A1"."L_DISCOUNT") ),:_V1) DESC NULLS LAST, "_A3"."O_ORDERDATE" ASC NULLS LAST LIMIT 10
+           TARGET DOMAIN : G1(G1N1) 10 rows, G2(G2N1) 10 rows
+           MERGE SORTING
+             SORT KEY : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2), ORDERS.O_ORDERDATE
+     4  -  TARGET : ROUND(SUM( _A1.L_EXTENDEDPRICE * ( :_V0 - _A1.L_DISCOUNT ) ),:_V1), _A3.O_ORDERDATE, _A1.L_ORDERKEY, _A3.O_SHIPPRIORITY
+     5  -  LIMIT SORT
+           SORT KEY : "ROUND(SUM( _A1.L_EXTENDEDPRICE * ( :_V0 - _A1.L_DISCOUNT ) ),:_V1) DESC NULLS LAST", "_A3.O_ORDERDATE ASC NULLS LAST"
+           RECORD COLUMN : _A1.L_ORDERKEY, _A3.O_SHIPPRIORITY
+           READ KEY COLUMN : ROUND(SUM( _A1.L_EXTENDEDPRICE * ( :_V0 - _A1.L_DISCOUNT ) ),:_V1), _A3.O_ORDERDATE
+           READ RECORD COLUMN : _A1.L_ORDERKEY, _A3.O_SHIPPRIORITY
+     6  -  GROUP KEY : _A1.L_ORDERKEY, _A3.O_ORDERDATE, _A3.O_SHIPPRIORITY
+           RECORD COLUMN : SUM( _A1.L_EXTENDEDPRICE * ( :_V0 - _A1.L_DISCOUNT ) )
+           READ KEY COLUMN : _A1.L_ORDERKEY, _A3.O_ORDERDATE, _A3.O_SHIPPRIORITY
+           READ RECORD COLUMN : SUM( _A1.L_EXTENDEDPRICE * ( :_V0 - _A1.L_DISCOUNT ) )
+     7  -  JOINED COLUMN : _A1.L_ORDERKEY, _A3.O_ORDERDATE, _A3.O_SHIPPRIORITY, _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+             CONSTANT FILTER : TRUE
+     8  -  JOINED COLUMN : _A3.O_ORDERKEY, _A3.O_ORDERDATE, _A3.O_SHIPPRIORITY
+     9  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : _A3.O_ORDERKEY, _A3.O_CUSTKEY, _A3.O_ORDERDATE, _A3.O_SHIPPRIORITY
+             PHYSICAL FILTER : _A3.O_ORDERDATE < :_V2
+    10  -  HASH KEY : _A2.C_CUSTKEY
+           READ KEY COLUMN : _A2.C_CUSTKEY
+             HASH FILTER : _A2.C_CUSTKEY = _A3.O_CUSTKEY
+           FETCH ONE ROW
+    11  -  CLONED 
+           READ COLUMN : _A2.C_CUSTKEY, _A2.C_MKTSEGMENT
+             PHYSICAL FILTER : _A2.C_MKTSEGMENT = :_V3
+    12  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_ORDERKEY
+           READ TABLE COLUMN : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT, _A1.L_SHIPDATE
+             MIN RANGE : _A1.L_ORDERKEY = {_A3.O_ORDERKEY}
+             MAX RANGE : _A1.L_ORDERKEY = {_A3.O_ORDERKEY}
+             PHYSICAL TABLE FILTER : _A1.L_SHIPDATE > :_V2
+
+<<<  end print plan
+
+
+
+--###############################
+--# Functional Query Definition
+--###############################
+
+--# Return the first 10 selected rows
+
+
+\set linesize 400
+\set timing on;
+
+--# result: 10 rows
+--#  l_orderkey |  revenue  | o_orderdate | o_shippriority 
+--# ------------+-----------+-------------+----------------
+--#     2456423 | 406181.01 | 1995-03-05  |              0
+--#     3459808 | 405838.70 | 1995-03-04  |              0
+--#      492164 | 390324.06 | 1995-02-19  |              0
+--#     1188320 | 384537.94 | 1995-03-09  |              0
+--#     2435712 | 378673.06 | 1995-02-26  |              0
+--#     4878020 | 378376.80 | 1995-03-12  |              0
+--#     5521732 | 375153.92 | 1995-03-13  |              0
+--#     2628192 | 373133.31 | 1995-02-22  |              0
+--#      993600 | 371407.46 | 1995-03-05  |              0
+--#     2300070 | 367371.15 | 1995-03-13  |              0
+
+\explain plan
+  select
+      l_orderkey,
+	  ROUND( sum(l_extendedprice*(1-l_discount)), 2) as revenue,
+	  o_orderdate,
+	  o_shippriority
+  from
+      customer,
+	  orders,
+	  lineitem
+  where
+        c_mktsegment = 'BUILDING'
+    and c_custkey = o_custkey
+	and l_orderkey = o_orderkey
+    and o_orderdate < date '1995-03-15'
+	and l_shipdate > date '1995-03-15'
+  group by
+      l_orderkey,
+	  o_orderdate,
+	  o_shippriority
+  order by
+      revenue desc,
+      o_orderdate
+  fetch 10;
+
+L_ORDERKEY   REVENUE O_ORDERDATE O_SHIPPRIORITY
+---------- --------- ----------- --------------
+   2456423 406181.01 1995-03-05               0
+   3459808  405838.7 1995-03-04               0
+    492164 390324.06 1995-02-19               0
+   1188320 384537.94 1995-03-09               0
+   2435712 378673.06 1995-02-26               0
+   4878020  378376.8 1995-03-12               0
+   5521732 375153.92 1995-03-13               0
+   2628192 373133.31 1995-02-22               0
+    993600 371407.46 1995-03-05               0
+   2300070 367371.15 1995-03-13               0
+
+10 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+=================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                           |                    ROWS |
+-----------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                           |                      10 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                |                      10 |
+|    2  |      MULTIPLE CLUSTER                                                       | LOCAL/REMOTE         10 |
+|    3  |        SELECT STATEMENT                                                     |                      10 |
+|    4  |          QUERY BLOCK ("$QB_IDX_2")                                          |                      10 |
+|    5  |            SORT INSTANT                                                     |                      10 |
+|    6  |              GROUP HASH INSTANT                                             |                    5864 |
+|    7  |                NESTED JOIN (INNER JOIN)                                     |                   15360 |
+|    8  |                  HASH JOIN (INNER JOIN)                                     |                   73770 |
+|    9  |                    TABLE ACCESS ("ORDERS" AS _A3)                           |                  365172 |
+|   10  |                    HASH JOIN INSTANT                                        |                   73770 |
+|   11  |                      TABLE ACCESS ("CUSTOMER" AS _A2)                       |                   30142 |
+|   12  |                  INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_ORDERKEY_FK")   | (    295571)      15360 |
+=================================================================================================================
+
+     1  -  TARGET : LINEITEM.L_ORDERKEY, ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2) AS REVENUE, ORDERS.O_ORDERDATE, ORDERS.O_SHIPPRIORITY
+     2  -  SQL : SELECT /*+ USE_ORDER_SORT USE_GROUP_HASH(119118) KEEP_JOINED_TABLE USE_NL_IN( _A1 ) USE_HASH_IN( _A2, 30142 ) FULL( _A3 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_ORDERKEY_FK" ) */ ROUND(SUM( "_A1"."L_EXTENDEDPRICE" * (:_V0 - "_A1"."L_DISCOUNT") ),:_V1), "_A3"."O_ORDERDATE", "_A1"."L_ORDERKEY", "_A3"."O_SHIPPRIORITY" FROM ( ( "PUBLIC"."ORDERS"@LOCAL AS "_A3" INNER JOIN "PUBLIC"."CUSTOMER"@LOCAL AS "_A2" ON "_A2"."C_CUSTKEY" = "_A3"."O_CUSTKEY") ALIAS "_A4" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A1" ON true ) ALIAS "_A5" WHERE "_A3"."O_ORDERDATE" < :_V2 AND "_A2"."C_MKTSEGMENT" = :_V3 AND "_A1"."L_ORDERKEY" = "_A3"."O_ORDERKEY" AND "_A1"."L_SHIPDATE" > :_V2 GROUP BY "_A1"."L_ORDERKEY", "_A3"."O_ORDERDATE", "_A3"."O_SHIPPRIORITY" ORDER BY ROUND(SUM( "_A1"."L_EXTENDEDPRICE" * (:_V0 - "_A1"."L_DISCOUNT") ),:_V1) DESC NULLS LAST, "_A3"."O_ORDERDATE" ASC NULLS LAST LIMIT 10
+           TARGET DOMAIN : G1(G1N1) 10 rows, G2(G2N1) 10 rows
+           MERGE SORTING
+             SORT KEY : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2), ORDERS.O_ORDERDATE
+     4  -  TARGET : ROUND(SUM( _A1.L_EXTENDEDPRICE * ( :_V0 - _A1.L_DISCOUNT ) ),:_V1), _A3.O_ORDERDATE, _A1.L_ORDERKEY, _A3.O_SHIPPRIORITY
+     5  -  LIMIT SORT
+           SORT KEY : "ROUND(SUM( _A1.L_EXTENDEDPRICE * ( :_V0 - _A1.L_DISCOUNT ) ),:_V1) DESC NULLS LAST", "_A3.O_ORDERDATE ASC NULLS LAST"
+           RECORD COLUMN : _A1.L_ORDERKEY, _A3.O_SHIPPRIORITY
+           READ KEY COLUMN : ROUND(SUM( _A1.L_EXTENDEDPRICE * ( :_V0 - _A1.L_DISCOUNT ) ),:_V1), _A3.O_ORDERDATE
+           READ RECORD COLUMN : _A1.L_ORDERKEY, _A3.O_SHIPPRIORITY
+     6  -  GROUP KEY : _A1.L_ORDERKEY, _A3.O_ORDERDATE, _A3.O_SHIPPRIORITY
+           RECORD COLUMN : SUM( _A1.L_EXTENDEDPRICE * ( :_V0 - _A1.L_DISCOUNT ) )
+           READ KEY COLUMN : _A1.L_ORDERKEY, _A3.O_ORDERDATE, _A3.O_SHIPPRIORITY
+           READ RECORD COLUMN : SUM( _A1.L_EXTENDEDPRICE * ( :_V0 - _A1.L_DISCOUNT ) )
+     7  -  JOINED COLUMN : _A1.L_ORDERKEY, _A3.O_ORDERDATE, _A3.O_SHIPPRIORITY, _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+             CONSTANT FILTER : TRUE
+     8  -  JOINED COLUMN : _A3.O_ORDERKEY, _A3.O_ORDERDATE, _A3.O_SHIPPRIORITY
+     9  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : _A3.O_ORDERKEY, _A3.O_CUSTKEY, _A3.O_ORDERDATE, _A3.O_SHIPPRIORITY
+             PHYSICAL FILTER : _A3.O_ORDERDATE < :_V2
+    10  -  HASH KEY : _A2.C_CUSTKEY
+           READ KEY COLUMN : _A2.C_CUSTKEY
+             HASH FILTER : _A2.C_CUSTKEY = _A3.O_CUSTKEY
+           FETCH ONE ROW
+    11  -  CLONED 
+           READ COLUMN : _A2.C_CUSTKEY, _A2.C_MKTSEGMENT
+             PHYSICAL FILTER : _A2.C_MKTSEGMENT = :_V3
+    12  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_ORDERKEY
+           READ TABLE COLUMN : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT, _A1.L_SHIPDATE
+             MIN RANGE : _A1.L_ORDERKEY = {_A3.O_ORDERKEY}
+             MAX RANGE : _A1.L_ORDERKEY = {_A3.O_ORDERKEY}
+             PHYSICAL TABLE FILTER : _A1.L_SHIPDATE > :_V2
+
+<<<  end print plan
+
+
+Elapsed time: 476.91400 ms 
+
+
+--#################################
+--# Report
+--#################################
+
+\set timing off;
+INSERT INTO TPCH_SF1_REPORT 
+       VALUES ( 'SF1_Q03', (:VAR_ELAPSED_TIME__ / 1000), TRUNC( 60 * 60 * 1000 / :VAR_ELAPSED_TIME__, 0 ) );
+
+1 row created.
+
+COMMIT;
+
+Commit complete.
+

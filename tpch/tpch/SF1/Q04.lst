@@ -1,0 +1,212 @@
+--####################################################################
+--# Order Priority Checking Query (Q4)
+--####################################################################
+
+--# This query determines how well the order priority system 
+--# is working and gives an assessment of customer satisfac-tion.
+
+--###############################
+--# Business Question
+--###############################
+
+--# The Order Priority Checking Query counts the number of orders 
+--# ordered in a given quarter of a given year in which 
+--# at least one lineitem was received by the customer 
+--# later than its committed date. 
+--# The query lists the count of such orders for each order priority 
+--# sorted in ascending priority order.
+
+\explain plan
+select
+    o_orderpriority,
+    count(*) as order_count
+from
+    orders
+where
+      o_orderdate >= date '1993-07-01'
+  and o_orderdate < date '1993-07-01' + interval '3' month
+  and exists (
+               select
+                      *
+                 from
+                      lineitem
+                where
+                      l_orderkey = o_orderkey
+                  and l_commitdate < l_receiptdate
+             )
+group by
+    o_orderpriority
+order by
+    o_orderpriority;
+
+O_ORDERPRIORITY ORDER_COUNT
+--------------- -----------
+1-URGENT              10594
+2-HIGH                10476
+3-MEDIUM              10410
+4-NOT SPECIFIED       10556
+5-LOW                 10487
+
+5 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+=================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                           |                    ROWS |
+-----------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                           |                       5 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                |                       5 |
+|    2  |      SORT INSTANT                                                           |                       5 |
+|    3  |        SINGLE CLUSTER                                                       | LOCAL/REMOTE          5 |
+|    4  |          SELECT STATEMENT                                                   |                       5 |
+|    5  |            QUERY BLOCK ("$QB_IDX_2")                                        |                       5 |
+|    6  |              GROUP HASH INSTANT                                             |                       5 |
+|    7  |                NESTED JOIN (SEMI)                                           |                   26390 |
+|    8  |                  TABLE ACCESS ("ORDERS" AS _A2)                             |                   28734 |
+|    9  |                  INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_ORDERKEY_FK")   | (     41754)      26390 |
+=================================================================================================================
+
+     1  -  TARGET : ORDERS.O_ORDERPRIORITY, COUNT(*) AS ORDER_COUNT
+     2  -  SORT KEY : "ORDERS.O_ORDERPRIORITY ASC NULLS LAST"
+           RECORD COLUMN : COUNT(*)
+           READ KEY COLUMN : ORDERS.O_ORDERPRIORITY
+           READ RECORD COLUMN : COUNT(*)
+     3  -  SQL : SELECT /*+ USE_GROUP_HASH(5) KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_ORDERKEY_FK" ) */ "_A2"."O_ORDERPRIORITY", COUNT(*) FROM ( "PUBLIC"."ORDERS"@"G1N1"|"G2N1" AS "_A2" SEMI JOIN "PUBLIC"."LINEITEM"@"G1N1"|"G2N1" AS "_A1" ON "_A1"."L_ORDERKEY" = "_A2"."O_ORDERKEY" AND "_A1"."L_RECEIPTDATE" > "_A1"."L_COMMITDATE") ALIAS "_A3" WHERE "_A2"."O_ORDERDATE" < :_V0 AND "_A2"."O_ORDERDATE" >= :_V1 GROUP BY "_A2"."O_ORDERPRIORITY"
+           TARGET DOMAIN : G1(G1N1) 5 rows, G2(G2N1) 5 rows
+           RE-GROUPING
+             GROUP KEY : ORDERS.O_ORDERPRIORITY
+             AGGREGATION : SUM( COUNT(*) )
+     5  -  TARGET : _A2.O_ORDERPRIORITY, COUNT(*)
+     6  -  GROUP KEY : _A2.O_ORDERPRIORITY
+           RECORD COLUMN : COUNT(*)
+           READ KEY COLUMN : _A2.O_ORDERPRIORITY
+           READ RECORD COLUMN : COUNT(*)
+     7  -  JOINED COLUMN : _A2.O_ORDERPRIORITY
+     8  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : _A2.O_ORDERKEY, _A2.O_ORDERDATE, _A2.O_ORDERPRIORITY
+             PHYSICAL FILTER : _A2.O_ORDERDATE < :_V0 AND _A2.O_ORDERDATE >= :_V1
+     9  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_ORDERKEY
+           READ TABLE COLUMN : _A1.L_COMMITDATE, _A1.L_RECEIPTDATE
+             MIN RANGE : _A1.L_ORDERKEY = {_A2.O_ORDERKEY}
+             MAX RANGE : _A1.L_ORDERKEY = {_A2.O_ORDERKEY}
+             PHYSICAL TABLE FILTER : _A1.L_RECEIPTDATE > _A1.L_COMMITDATE
+
+<<<  end print plan
+
+
+
+--###############################
+--# Functional Query Definition
+--###############################
+
+\set linesize 400
+\set timing on;
+
+--# result: 5 rows
+--#  o_orderpriority | order_count 
+--# -----------------+-------------
+--#  1-URGENT        |       10594
+--#  2-HIGH          |       10476
+--#  3-MEDIUM        |       10410
+--#  4-NOT SPECIFIED |       10556
+--#  5-LOW           |       10487
+\explain plan
+select
+    o_orderpriority,
+    count(*) as order_count
+from
+    orders
+where
+      o_orderdate >= date '1993-07-01'
+  and o_orderdate < date '1993-07-01' + interval '3' month
+  and exists (
+               select
+                      *
+                 from
+                      lineitem
+                where
+                      l_orderkey = o_orderkey
+                  and l_commitdate < l_receiptdate
+             )
+group by
+    o_orderpriority
+order by
+    o_orderpriority;
+
+O_ORDERPRIORITY ORDER_COUNT
+--------------- -----------
+1-URGENT              10594
+2-HIGH                10476
+3-MEDIUM              10410
+4-NOT SPECIFIED       10556
+5-LOW                 10487
+
+5 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+=================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                           |                    ROWS |
+-----------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                           |                       5 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                |                       5 |
+|    2  |      SORT INSTANT                                                           |                       5 |
+|    3  |        SINGLE CLUSTER                                                       | LOCAL/REMOTE          5 |
+|    4  |          SELECT STATEMENT                                                   |                       5 |
+|    5  |            QUERY BLOCK ("$QB_IDX_2")                                        |                       5 |
+|    6  |              GROUP HASH INSTANT                                             |                       5 |
+|    7  |                NESTED JOIN (SEMI)                                           |                   26390 |
+|    8  |                  TABLE ACCESS ("ORDERS" AS _A2)                             |                   28734 |
+|    9  |                  INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_ORDERKEY_FK")   | (     41754)      26390 |
+=================================================================================================================
+
+     1  -  TARGET : ORDERS.O_ORDERPRIORITY, COUNT(*) AS ORDER_COUNT
+     2  -  SORT KEY : "ORDERS.O_ORDERPRIORITY ASC NULLS LAST"
+           RECORD COLUMN : COUNT(*)
+           READ KEY COLUMN : ORDERS.O_ORDERPRIORITY
+           READ RECORD COLUMN : COUNT(*)
+     3  -  SQL : SELECT /*+ USE_GROUP_HASH(5) KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_ORDERKEY_FK" ) */ "_A2"."O_ORDERPRIORITY", COUNT(*) FROM ( "PUBLIC"."ORDERS"@"G1N1"|"G2N1" AS "_A2" SEMI JOIN "PUBLIC"."LINEITEM"@"G1N1"|"G2N1" AS "_A1" ON "_A1"."L_ORDERKEY" = "_A2"."O_ORDERKEY" AND "_A1"."L_RECEIPTDATE" > "_A1"."L_COMMITDATE") ALIAS "_A3" WHERE "_A2"."O_ORDERDATE" < :_V0 AND "_A2"."O_ORDERDATE" >= :_V1 GROUP BY "_A2"."O_ORDERPRIORITY"
+           TARGET DOMAIN : G1(G1N1) 5 rows, G2(G2N1) 5 rows
+           RE-GROUPING
+             GROUP KEY : ORDERS.O_ORDERPRIORITY
+             AGGREGATION : SUM( COUNT(*) )
+     5  -  TARGET : _A2.O_ORDERPRIORITY, COUNT(*)
+     6  -  GROUP KEY : _A2.O_ORDERPRIORITY
+           RECORD COLUMN : COUNT(*)
+           READ KEY COLUMN : _A2.O_ORDERPRIORITY
+           READ RECORD COLUMN : COUNT(*)
+     7  -  JOINED COLUMN : _A2.O_ORDERPRIORITY
+     8  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : _A2.O_ORDERKEY, _A2.O_ORDERDATE, _A2.O_ORDERPRIORITY
+             PHYSICAL FILTER : _A2.O_ORDERDATE < :_V0 AND _A2.O_ORDERDATE >= :_V1
+     9  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_ORDERKEY
+           READ TABLE COLUMN : _A1.L_COMMITDATE, _A1.L_RECEIPTDATE
+             MIN RANGE : _A1.L_ORDERKEY = {_A2.O_ORDERKEY}
+             MAX RANGE : _A1.L_ORDERKEY = {_A2.O_ORDERKEY}
+             PHYSICAL TABLE FILTER : _A1.L_RECEIPTDATE > _A1.L_COMMITDATE
+
+<<<  end print plan
+
+
+Elapsed time: 190.39800 ms 
+
+
+--#################################
+--# Report
+--#################################
+
+\set timing off;
+
+INSERT INTO TPCH_SF1_REPORT 
+       VALUES ( 'SF1_Q04', (:VAR_ELAPSED_TIME__ / 1000), TRUNC( 60 * 60 * 1000 / :VAR_ELAPSED_TIME__, 0 ) );
+
+1 row created.
+
+COMMIT;
+
+Commit complete.
+

@@ -1,0 +1,249 @@
+--####################################################################
+--# Small-Quantity-Order Revenue Query (Q17)
+--####################################################################
+
+--# This query determines how much average yearly revenue would be lost 
+--# if orders were no longer filled for small quantities of certain parts.
+--#  This may reduce overhead expenses by concentrating sales 
+--# on larger shipments.
+
+--###############################
+--# Business Question
+--###############################
+
+--# The Small-Quantity-Order Revenue Query considers parts of 
+--# a given brand and with a given container type and determines 
+--# the average lineitem quantity of such parts ordered for 
+--# all orders (past and pending) in the 7-year data-base. 
+--# What would be the average yearly gross (undiscounted) loss 
+--# in revenue if orders for these parts with a quantity of 
+--# less than 20% of this average were no longer taken?
+
+\explain plan
+select
+    ROUND( sum(l_extendedprice) / 7.0, 2) as avg_yearly
+from
+    lineitem,
+    part
+where
+      p_partkey = l_partkey
+  and p_brand = 'Brand#23'
+  and p_container = 'MED BOX'
+  and l_quantity < (
+                     select
+                         0.2 * avg(l_quantity)
+                     from
+                         lineitem
+                     where
+                         l_partkey = p_partkey
+                   );
+
+AVG_YEARLY
+----------
+ 348406.05
+
+1 row selected.
+
+>>>  start print plan
+
+< Execution Plan >
+==============================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                                        |                    ROWS |
+------------------------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                                        |                       1 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                             |                       1 |
+|    2  |      SINGLE CLUSTER                                                                      | LOCAL/REMOTE          1 |
+|    3  |        CLUSTER PUSHER ("_$NI_6")                                                         |                     204 |
+|    4  |          NESTED JOIN (INNER JOIN)                                                        |                     204 |
+|    5  |            PLAN BASED CLUSTER                                                            | LOCAL/REMOTE        204 |
+|    6  |              TABLE ACCESS ("PART")                                                       |                      89 |
+|    7  |            INLINE_VIEW                                                                   |                     204 |
+|    8  |              QUERY BLOCK ("$QB_IDX_8")                                                   |                     204 |
+|    9  |                SINGLE CLUSTER                                                            | LOCAL/REMOTE        204 |
+|   10  |                  SELECT STATEMENT                                                        |                     204 |
+|   11  |                    QUERY BLOCK ("$QB_IDX_2")                                             |                     204 |
+|   12  |                      GROUP                                                               |                     204 |
+|   13  |                        INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_PARTKEY_SUPPKEY_FK")   | (      3065)       3065 |
+|   14  |        SELECT STATEMENT                                                                  |                       1 |
+|   15  |          QUERY BLOCK ("$QB_IDX_2")                                                       |                       1 |
+|   16  |            AGGREGATION BY HASH                                                           |                       1 |
+|   17  |              NESTED JOIN (INNER JOIN)                                                    |                     305 |
+|   18  |                PUSHER TABLE ACCESS ("_$NI_6" AS _A2)                                     |                     204 |
+|   19  |                INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_PARTKEY_SUPPKEY_FK")           | (      3065)        305 |
+==============================================================================================================================
+
+     1  -  TARGET : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE ) / 7.0,2) AS AVG_YEARLY
+     2  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_PARTKEY_SUPPKEY_FK" ) */ SUM( "_A1"."L_EXTENDEDPRICE" ) FROM ( "SESSION_SCHEMA"."_$NI_6"@LOCAL AS "_A2" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A1" ON true ) ALIAS "_A3" WHERE "_A1"."L_PARTKEY" = "_A2"."P_PARTKEY" AND "_A1"."L_QUANTITY" < "_A2"."_$NI_6_C1"
+           TARGET DOMAIN : G1(G1N1) 1 rows, G2(G2N1) 1 rows
+           RE-AGGREGATION
+             AGGREGATION : SUM( SUM( LINEITEM.L_EXTENDEDPRICE ) )
+     3  -  SQL : DECLARE INSTANT TABLE "SESSION_SCHEMA"."_$NI_6" ( "P_PARTKEY" NUMBER(10, 0), "_$NI_6_C1" NUMBER ) 
+           COLUMN : PART.P_PARTKEY AS P_PARTKEY, $C1 AS _$NI_6_C1
+           CLONED
+           TARGET DOMAIN : G1(G1N1) 204 rows, G2(G2N1) 204 rows
+     4  -  JOINED COLUMN : PART.P_PARTKEY, $C1
+     5  -  SQL : SELECT /*+ FULL( _A1 ) */ "_A1"."P_PARTKEY" FROM "PUBLIC"."PART"@LOCAL AS "_A1" WHERE "_A1"."P_BRAND" = :_V0 AND "_A1"."P_CONTAINER" = :_V1
+           TARGET DOMAIN : G1(G1N1) 89 rows, G2(G2N1) 115 rows
+     6  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : PART.P_PARTKEY, PART.P_BRAND, PART.P_CONTAINER
+             PHYSICAL FILTER : PART.P_BRAND = 'Brand#23' AND PART.P_CONTAINER = 'MED BOX'
+     7  -  COLUMN : LINEITEM.L_PARTKEY AS L_PARTKEY, 0.2 * ( SUM( LINEITEM.L_QUANTITY ) / COUNT( LINEITEM.L_QUANTITY ) ) AS $C1
+     8  -  TARGET : LINEITEM.L_PARTKEY, 0.2 * ( SUM( LINEITEM.L_QUANTITY ) / COUNT( LINEITEM.L_QUANTITY ) )
+     9  -  SQL : SELECT /*+ INDEX( _A1, "PUBLIC"."LINEITEM_PARTKEY_SUPPKEY_FK" ) */ "_A1"."L_PARTKEY", SUM( "_A1"."L_QUANTITY" ), COUNT( "_A1"."L_QUANTITY" ) FROM "PUBLIC"."LINEITEM"@LOCAL AS "_A1" WHERE "_A1"."L_PARTKEY" = :_V0 GROUP BY "_A1"."L_PARTKEY"
+           TARGET DOMAIN : G1(G1N1) 204 rows, G2(G2N1) 204 rows
+           RE-GROUPING
+             GROUP KEY : LINEITEM.L_PARTKEY
+             AGGREGATION : SUM( SUM( LINEITEM.L_QUANTITY ) ), SUM( COUNT( LINEITEM.L_QUANTITY ) )
+    11  -  TARGET : _A1.L_PARTKEY, SUM( _A1.L_QUANTITY ), COUNT( _A1.L_QUANTITY )
+    12  -  GROUP KEY : _A1.L_PARTKEY
+           RECORD COLUMN : SUM( _A1.L_QUANTITY ), COUNT( _A1.L_QUANTITY )
+    13  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_PARTKEY
+           READ TABLE COLUMN : _A1.L_QUANTITY
+             MIN RANGE : _A1.L_PARTKEY = :_V0
+             MAX RANGE : _A1.L_PARTKEY = :_V0
+    15  -  TARGET : SUM( _A1.L_EXTENDEDPRICE )
+    16  -  AGGREGATION : SUM( _A1.L_EXTENDEDPRICE )
+    17  -  JOINED COLUMN : _A1.L_EXTENDEDPRICE
+             CONSTANT FILTER : TRUE
+    18  -  READ COLUMN : _A2.P_PARTKEY, _A2._$NI_6_C1
+    19  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_PARTKEY
+           READ TABLE COLUMN : _A1.L_QUANTITY, _A1.L_EXTENDEDPRICE
+             MIN RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             MAX RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             PHYSICAL TABLE FILTER : _A1.L_QUANTITY < {_A2._$NI_6_C1}
+
+<<<  end print plan
+
+
+
+--###############################
+--# Functional Query Definition
+--###############################
+
+\set linesize 400
+\set timing on;
+
+--# result: 1 rows
+--#  avg_yearly 
+--# ------------
+--#   348406.05
+\explain plan
+select
+    ROUND( sum(l_extendedprice) / 7.0, 2) as avg_yearly
+from
+    lineitem,
+    part
+where
+      p_partkey = l_partkey
+  and p_brand = 'Brand#23'
+  and p_container = 'MED BOX'
+  and l_quantity < (
+                     select
+                         0.2 * avg(l_quantity)
+                     from
+                         lineitem
+                     where
+                         l_partkey = p_partkey
+                   );
+
+AVG_YEARLY
+----------
+ 348406.05
+
+1 row selected.
+
+>>>  start print plan
+
+< Execution Plan >
+==============================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                                        |                    ROWS |
+------------------------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                                        |                       1 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                             |                       1 |
+|    2  |      SINGLE CLUSTER                                                                      | LOCAL/REMOTE          1 |
+|    3  |        CLUSTER PUSHER ("_$NI_6")                                                         |                     204 |
+|    4  |          NESTED JOIN (INNER JOIN)                                                        |                     204 |
+|    5  |            PLAN BASED CLUSTER                                                            | LOCAL/REMOTE        204 |
+|    6  |              TABLE ACCESS ("PART")                                                       |                      89 |
+|    7  |            INLINE_VIEW                                                                   |                     204 |
+|    8  |              QUERY BLOCK ("$QB_IDX_8")                                                   |                     204 |
+|    9  |                SINGLE CLUSTER                                                            | LOCAL/REMOTE        204 |
+|   10  |                  SELECT STATEMENT                                                        |                     204 |
+|   11  |                    QUERY BLOCK ("$QB_IDX_2")                                             |                     204 |
+|   12  |                      GROUP                                                               |                     204 |
+|   13  |                        INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_PARTKEY_SUPPKEY_FK")   | (      3065)       3065 |
+|   14  |        SELECT STATEMENT                                                                  |                       1 |
+|   15  |          QUERY BLOCK ("$QB_IDX_2")                                                       |                       1 |
+|   16  |            AGGREGATION BY HASH                                                           |                       1 |
+|   17  |              NESTED JOIN (INNER JOIN)                                                    |                     305 |
+|   18  |                PUSHER TABLE ACCESS ("_$NI_6" AS _A2)                                     |                     204 |
+|   19  |                INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_PARTKEY_SUPPKEY_FK")           | (      3065)        305 |
+==============================================================================================================================
+
+     1  -  TARGET : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE ) / 7.0,2) AS AVG_YEARLY
+     2  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_PARTKEY_SUPPKEY_FK" ) */ SUM( "_A1"."L_EXTENDEDPRICE" ) FROM ( "SESSION_SCHEMA"."_$NI_6"@LOCAL AS "_A2" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A1" ON true ) ALIAS "_A3" WHERE "_A1"."L_PARTKEY" = "_A2"."P_PARTKEY" AND "_A1"."L_QUANTITY" < "_A2"."_$NI_6_C1"
+           TARGET DOMAIN : G1(G1N1) 1 rows, G2(G2N1) 1 rows
+           RE-AGGREGATION
+             AGGREGATION : SUM( SUM( LINEITEM.L_EXTENDEDPRICE ) )
+     3  -  SQL : DECLARE INSTANT TABLE "SESSION_SCHEMA"."_$NI_6" ( "P_PARTKEY" NUMBER(10, 0), "_$NI_6_C1" NUMBER ) 
+           COLUMN : PART.P_PARTKEY AS P_PARTKEY, $C1 AS _$NI_6_C1
+           CLONED
+           TARGET DOMAIN : G1(G1N1) 204 rows, G2(G2N1) 204 rows
+     4  -  JOINED COLUMN : PART.P_PARTKEY, $C1
+     5  -  SQL : SELECT /*+ FULL( _A1 ) */ "_A1"."P_PARTKEY" FROM "PUBLIC"."PART"@LOCAL AS "_A1" WHERE "_A1"."P_BRAND" = :_V0 AND "_A1"."P_CONTAINER" = :_V1
+           TARGET DOMAIN : G1(G1N1) 89 rows, G2(G2N1) 115 rows
+     6  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : PART.P_PARTKEY, PART.P_BRAND, PART.P_CONTAINER
+             PHYSICAL FILTER : PART.P_BRAND = 'Brand#23' AND PART.P_CONTAINER = 'MED BOX'
+     7  -  COLUMN : LINEITEM.L_PARTKEY AS L_PARTKEY, 0.2 * ( SUM( LINEITEM.L_QUANTITY ) / COUNT( LINEITEM.L_QUANTITY ) ) AS $C1
+     8  -  TARGET : LINEITEM.L_PARTKEY, 0.2 * ( SUM( LINEITEM.L_QUANTITY ) / COUNT( LINEITEM.L_QUANTITY ) )
+     9  -  SQL : SELECT /*+ INDEX( _A1, "PUBLIC"."LINEITEM_PARTKEY_SUPPKEY_FK" ) */ "_A1"."L_PARTKEY", SUM( "_A1"."L_QUANTITY" ), COUNT( "_A1"."L_QUANTITY" ) FROM "PUBLIC"."LINEITEM"@LOCAL AS "_A1" WHERE "_A1"."L_PARTKEY" = :_V0 GROUP BY "_A1"."L_PARTKEY"
+           TARGET DOMAIN : G1(G1N1) 204 rows, G2(G2N1) 204 rows
+           RE-GROUPING
+             GROUP KEY : LINEITEM.L_PARTKEY
+             AGGREGATION : SUM( SUM( LINEITEM.L_QUANTITY ) ), SUM( COUNT( LINEITEM.L_QUANTITY ) )
+    11  -  TARGET : _A1.L_PARTKEY, SUM( _A1.L_QUANTITY ), COUNT( _A1.L_QUANTITY )
+    12  -  GROUP KEY : _A1.L_PARTKEY
+           RECORD COLUMN : SUM( _A1.L_QUANTITY ), COUNT( _A1.L_QUANTITY )
+    13  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_PARTKEY
+           READ TABLE COLUMN : _A1.L_QUANTITY
+             MIN RANGE : _A1.L_PARTKEY = :_V0
+             MAX RANGE : _A1.L_PARTKEY = :_V0
+    15  -  TARGET : SUM( _A1.L_EXTENDEDPRICE )
+    16  -  AGGREGATION : SUM( _A1.L_EXTENDEDPRICE )
+    17  -  JOINED COLUMN : _A1.L_EXTENDEDPRICE
+             CONSTANT FILTER : TRUE
+    18  -  READ COLUMN : _A2.P_PARTKEY, _A2._$NI_6_C1
+    19  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_PARTKEY
+           READ TABLE COLUMN : _A1.L_QUANTITY, _A1.L_EXTENDEDPRICE
+             MIN RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             MAX RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             PHYSICAL TABLE FILTER : _A1.L_QUANTITY < {_A2._$NI_6_C1}
+
+<<<  end print plan
+
+
+Elapsed time: 58.41800 ms 
+
+
+
+--#################################
+--# Report
+--#################################
+
+\set timing off;
+
+INSERT INTO TPCH_SF1_REPORT 
+       VALUES ( 'SF1_Q17', (:VAR_ELAPSED_TIME__ / 1000), TRUNC( 60 * 60 * 1000 / :VAR_ELAPSED_TIME__, 0 ) );
+
+1 row created.
+
+COMMIT;
+
+Commit complete.
+
+

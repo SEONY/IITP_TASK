@@ -1,0 +1,84 @@
+--####################################################################
+--# Top Supplier Query (Q15)
+--####################################################################
+
+--# This query determines the top supplier so it can be rewarded, 
+--# given more business, or identified for special recogni-tion.
+
+--###############################
+--# Business Question
+--###############################
+
+--# The Top Supplier Query finds the supplier who contributed the most 
+--# to the overall revenue for parts shipped during a given quarter of 
+--# a given year. 
+--# In case of a tie, the query lists all suppliers 
+--# whose contribution was equal to the maximum, 
+--# presented in supplier number order.
+
+\explain plan
+select
+    s_suppkey,
+    s_name,
+    s_address,
+    s_phone,
+    total_revenue
+from
+    supplier,
+    revenue
+where
+      s_suppkey = supplier_no
+  and total_revenue = (
+                        select
+                            max(total_revenue)
+                        from
+                            revenue
+                      )
+order by
+   s_suppkey;
+
+--###############################
+--# Functional Query Definition
+--###############################
+
+--# Move to CreateTable.sql
+--# to prevent interfering
+--# when parallel client's random permutation
+
+\set linesize 400
+\set timing on;
+
+--# result: 1 rows
+--#  s_suppkey |          s_name           |     s_address     |     s_phone     | total_revenue 
+--# -----------+---------------------------+-------------------+-----------------+---------------
+--#       8449 | Supplier#000008449        | Wp34zim9qYFbVctdW | 20-469-856-8873 |    1772627.21
+\explain plan
+select
+    s_suppkey,
+    s_name,
+    s_address,
+    s_phone,
+    total_revenue
+from
+    supplier,
+    revenue
+where
+      s_suppkey = supplier_no
+  and total_revenue = (
+                        select
+                            max(total_revenue)
+                        from
+                            revenue
+                      )
+order by
+   s_suppkey;
+
+--#################################
+--# Report
+--#################################
+
+\set timing off;
+
+INSERT INTO TPCH_SF1_REPORT 
+       VALUES ( 'SF1_Q15', (:VAR_ELAPSED_TIME__ / 1000), TRUNC( 60 * 60 * 1000 / :VAR_ELAPSED_TIME__, 0 ) );
+COMMIT;

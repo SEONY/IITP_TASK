@@ -1,0 +1,300 @@
+--####################################################################
+--# Local Supplier Volume Query (Q5)
+--####################################################################
+
+--# This query lists the revenue volume done through local suppliers.
+
+--###############################
+--# Business Question
+--###############################
+
+--# The Local Supplier Volume Query lists for each nation 
+--# in a region the revenue volume that resulted 
+--# from lineitem transactions in which the customer ordering parts 
+--# and the supplier filling them were both within that nation. 
+--# The query is run in order to determine whether to institute 
+--# local distribution centers in a given region. 
+--# The query consid-ers only parts ordered in a given year. 
+--# The query displays the nations and revenue volume 
+--# in descending order by revenue. 
+--# Revenue volume for all qualifying lineitems in a particular nation 
+--# is defined as sum(l_extendedprice * (1 - l_discount)).
+
+\explain plan
+select
+    n_name,
+    ROUND( sum(l_extendedprice * (1 - l_discount)), 2) as revenue
+from
+    customer,
+    orders,
+    lineitem,
+    supplier,
+    nation,
+    region
+where
+      c_custkey = o_custkey
+  and l_orderkey = o_orderkey
+  and l_suppkey = s_suppkey
+  and c_nationkey = s_nationkey
+  and s_nationkey = n_nationkey
+  and n_regionkey = r_regionkey
+  and r_name = 'ASIA'
+  and o_orderdate >= date '1994-01-01'
+  and o_orderdate < date '1994-01-01' + interval '1' year
+group by
+    n_name
+order by
+    revenue desc;
+
+N_NAME                        REVENUE
+------------------------- -----------
+INDONESIA                 55502041.17
+VIETNAM                      55295087
+CHINA                     53724494.26
+INDIA                        52035512
+JAPAN                      45410175.7
+
+5 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+==========================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                                    |                    ROWS |
+--------------------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                                    |                       5 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                         |                       5 |
+|    2  |      SORT INSTANT                                                                    |                       5 |
+|    3  |        SINGLE CLUSTER                                                                | LOCAL/REMOTE          5 |
+|    4  |          SELECT STATEMENT                                                            |                       5 |
+|    5  |            QUERY BLOCK ("$QB_IDX_2")                                                 |                       5 |
+|    6  |              GROUP HASH INSTANT                                                      |                       5 |
+|    7  |                HASH JOIN (INNER JOIN)                                                |                    3589 |
+|    8  |                  NESTED JOIN (INNER JOIN)                                            |                   92436 |
+|    9  |                    HASH JOIN (INNER JOIN)                                            |                   23096 |
+|   10  |                      TABLE ACCESS ("ORDERS" AS _A4)                                  |                  114372 |
+|   11  |                      HASH JOIN INSTANT                                               |                   23096 |
+|   12  |                        NESTED JOIN (INNER JOIN)                                      |                   30183 |
+|   13  |                          NESTED JOIN (INNER JOIN)                                    |                       5 |
+|   14  |                            TABLE ACCESS ("REGION" AS _A7)                            |                       1 |
+|   15  |                            INDEX ACCESS ("NATION" AS _A6, "NATION_REGIONKEY_FK")     | (         5)          5 |
+|   16  |                          INDEX ACCESS ("CUSTOMER" AS _A5, "CUSTOMER_NATIONKEY_FK")   | (     30183)      30183 |
+|   17  |                    INDEX ACCESS ("LINEITEM" AS _A2, "LINEITEM_ORDERKEY_FK")          | (     92436)      92436 |
+|   18  |                  HASH JOIN INSTANT                                                   |                    3589 |
+|   19  |                    TABLE ACCESS ("SUPPLIER" AS _A1)                                  |                   10000 |
+==========================================================================================================================
+
+     1  -  TARGET : NATION.N_NAME, ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2) AS REVENUE
+     2  -  SORT KEY : "ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2) DESC NULLS LAST"
+           RECORD COLUMN : NATION.N_NAME
+           READ KEY COLUMN : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2)
+           READ RECORD COLUMN : NATION.N_NAME
+     3  -  SQL : SELECT /*+ USE_GROUP_HASH(25) KEEP_JOINED_TABLE USE_HASH_IN( _A1, 10000 ) USE_NL_IN( _A2 ) USE_HASH_IN( _A3, 15000 ) FULL( _A4 ) USE_NL_IN( _A5 ) USE_NL_IN( _A6 ) FULL( _A7 ) INDEX( _A6, "PUBLIC"."NATION_REGIONKEY_FK" ) INDEX( _A5, "PUBLIC"."CUSTOMER_NATIONKEY_FK" ) INDEX( _A2, "PUBLIC"."LINEITEM_ORDERKEY_FK" ) FULL( _A1 ) */ "_A6"."N_NAME", SUM( "_A2"."L_EXTENDEDPRICE" * (:_V0 - "_A2"."L_DISCOUNT") ) FROM ( ( ( "PUBLIC"."ORDERS"@LOCAL AS "_A4" INNER JOIN ( ( "PUBLIC"."REGION"@LOCAL AS "_A7" INNER JOIN "PUBLIC"."NATION"@LOCAL AS "_A6" ON true ) ALIAS "_A8" INNER JOIN "PUBLIC"."CUSTOMER"@LOCAL AS "_A5" ON true ) ALIAS "_A3" ON "_A5"."C_CUSTKEY" = "_A4"."O_CUSTKEY") ALIAS "_A9" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A2" ON true ) ALIAS "_A10" INNER JOIN "PUBLIC"."SUPPLIER"@LOCAL AS "_A1" ON "_A1"."S_SUPPKEY" = "_A2"."L_SUPPKEY" AND "_A1"."S_NATIONKEY" = "_A6"."N_NATIONKEY") ALIAS "_A11" WHERE "_A4"."O_ORDERDATE" < :_V1 AND "_A4"."O_ORDERDATE" >= :_V2 AND "_A7"."R_NAME" = :_V3 AND "_A6"."N_REGIONKEY" = "_A7"."R_REGIONKEY" AND "_A5"."C_NATIONKEY" = "_A6"."N_NATIONKEY" AND "_A2"."L_ORDERKEY" = "_A4"."O_ORDERKEY" GROUP BY "_A6"."N_NAME"
+           TARGET DOMAIN : G1(G1N1) 5 rows, G2(G2N1) 5 rows
+           RE-GROUPING
+             GROUP KEY : NATION.N_NAME
+             AGGREGATION : SUM( SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ) )
+     5  -  TARGET : _A6.N_NAME, SUM( _A2.L_EXTENDEDPRICE * ( :_V0 - _A2.L_DISCOUNT ) )
+     6  -  GROUP KEY : _A6.N_NAME
+           RECORD COLUMN : SUM( _A2.L_EXTENDEDPRICE * ( :_V0 - _A2.L_DISCOUNT ) )
+           READ KEY COLUMN : _A6.N_NAME
+           READ RECORD COLUMN : SUM( _A2.L_EXTENDEDPRICE * ( :_V0 - _A2.L_DISCOUNT ) )
+     7  -  JOINED COLUMN : _A6.N_NAME, _A2.L_EXTENDEDPRICE, _A2.L_DISCOUNT
+     8  -  JOINED COLUMN : _A2.L_SUPPKEY, _A6.N_NATIONKEY, _A6.N_NAME, _A2.L_EXTENDEDPRICE, _A2.L_DISCOUNT
+             CONSTANT FILTER : TRUE
+     9  -  JOINED COLUMN : _A4.O_ORDERKEY, _A6.N_NATIONKEY, _A6.N_NAME
+    10  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : _A4.O_ORDERKEY, _A4.O_CUSTKEY, _A4.O_ORDERDATE
+             PHYSICAL FILTER : _A4.O_ORDERDATE < :_V1 AND _A4.O_ORDERDATE >= :_V2
+    11  -  HASH KEY : _A5.C_CUSTKEY
+           RECORD COLUMN : _A6.N_NATIONKEY, _A6.N_NAME
+           READ KEY COLUMN : _A5.C_CUSTKEY, _A6.N_NATIONKEY, _A6.N_NAME
+             HASH FILTER : _A5.C_CUSTKEY = _A4.O_CUSTKEY
+    12  -  JOINED COLUMN : _A5.C_CUSTKEY, _A6.N_NATIONKEY, _A6.N_NAME
+             CONSTANT FILTER : TRUE
+    13  -  JOINED COLUMN : _A6.N_NATIONKEY, _A6.N_NAME
+             CONSTANT FILTER : TRUE
+    14  -  CLONED 
+           READ COLUMN : _A7.R_REGIONKEY, _A7.R_NAME
+             PHYSICAL FILTER : _A7.R_NAME = :_V3
+    15  -  CLONED 
+           READ INDEX COLUMN : _A6.N_REGIONKEY
+           READ TABLE COLUMN : _A6.N_NATIONKEY, _A6.N_NAME
+             MIN RANGE : _A6.N_REGIONKEY = {_A7.R_REGIONKEY}
+             MAX RANGE : _A6.N_REGIONKEY = {_A7.R_REGIONKEY}
+    16  -  CLONED 
+           READ INDEX COLUMN : _A5.C_NATIONKEY
+           READ TABLE COLUMN : _A5.C_CUSTKEY
+             MIN RANGE : _A5.C_NATIONKEY = {_A6.N_NATIONKEY}
+             MAX RANGE : _A5.C_NATIONKEY = {_A6.N_NATIONKEY}
+    17  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A2.L_ORDERKEY
+           READ TABLE COLUMN : _A2.L_SUPPKEY, _A2.L_EXTENDEDPRICE, _A2.L_DISCOUNT
+             MIN RANGE : _A2.L_ORDERKEY = {_A4.O_ORDERKEY}
+             MAX RANGE : _A2.L_ORDERKEY = {_A4.O_ORDERKEY}
+    18  -  HASH KEY : _A1.S_SUPPKEY, _A1.S_NATIONKEY
+           READ KEY COLUMN : _A1.S_SUPPKEY, _A1.S_NATIONKEY
+             HASH FILTER : _A1.S_SUPPKEY = _A2.L_SUPPKEY AND _A1.S_NATIONKEY = _A6.N_NATIONKEY
+           FETCH ONE ROW
+    19  -  CLONED 
+           READ COLUMN : _A1.S_SUPPKEY, _A1.S_NATIONKEY
+
+<<<  end print plan
+
+
+
+--###############################
+--# Functional Query Definition
+--###############################
+
+\set linesize 400
+\set timing on;
+
+--# result: 5 rows
+--#          n_name           |   revenue   
+--# ---------------------------+-------------
+--#  INDONESIA                 | 55502041.17
+--#  VIETNAM                   | 55295087.00
+--#  CHINA                     | 53724494.26
+--#  INDIA                     | 52035512.00
+--#  JAPAN                     | 45410175.70
+
+\explain plan
+select
+    n_name,
+    ROUND( sum(l_extendedprice * (1 - l_discount)), 2) as revenue
+from
+    customer,
+    orders,
+    lineitem,
+    supplier,
+    nation,
+    region
+where
+      c_custkey = o_custkey
+  and l_orderkey = o_orderkey
+  and l_suppkey = s_suppkey
+  and c_nationkey = s_nationkey
+  and s_nationkey = n_nationkey
+  and n_regionkey = r_regionkey
+  and r_name = 'ASIA'
+  and o_orderdate >= date '1994-01-01'
+  and o_orderdate < date '1994-01-01' + interval '1' year
+group by
+    n_name
+order by
+    revenue desc;
+
+N_NAME                        REVENUE
+------------------------- -----------
+INDONESIA                 55502041.17
+VIETNAM                      55295087
+CHINA                     53724494.26
+INDIA                        52035512
+JAPAN                      45410175.7
+
+5 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+==========================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                                    |                    ROWS |
+--------------------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                                    |                       5 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                         |                       5 |
+|    2  |      SORT INSTANT                                                                    |                       5 |
+|    3  |        SINGLE CLUSTER                                                                | LOCAL/REMOTE          5 |
+|    4  |          SELECT STATEMENT                                                            |                       5 |
+|    5  |            QUERY BLOCK ("$QB_IDX_2")                                                 |                       5 |
+|    6  |              GROUP HASH INSTANT                                                      |                       5 |
+|    7  |                HASH JOIN (INNER JOIN)                                                |                    3589 |
+|    8  |                  NESTED JOIN (INNER JOIN)                                            |                   92436 |
+|    9  |                    HASH JOIN (INNER JOIN)                                            |                   23096 |
+|   10  |                      TABLE ACCESS ("ORDERS" AS _A4)                                  |                  114372 |
+|   11  |                      HASH JOIN INSTANT                                               |                   23096 |
+|   12  |                        NESTED JOIN (INNER JOIN)                                      |                   30183 |
+|   13  |                          NESTED JOIN (INNER JOIN)                                    |                       5 |
+|   14  |                            TABLE ACCESS ("REGION" AS _A7)                            |                       1 |
+|   15  |                            INDEX ACCESS ("NATION" AS _A6, "NATION_REGIONKEY_FK")     | (         5)          5 |
+|   16  |                          INDEX ACCESS ("CUSTOMER" AS _A5, "CUSTOMER_NATIONKEY_FK")   | (     30183)      30183 |
+|   17  |                    INDEX ACCESS ("LINEITEM" AS _A2, "LINEITEM_ORDERKEY_FK")          | (     92436)      92436 |
+|   18  |                  HASH JOIN INSTANT                                                   |                    3589 |
+|   19  |                    TABLE ACCESS ("SUPPLIER" AS _A1)                                  |                   10000 |
+==========================================================================================================================
+
+     1  -  TARGET : NATION.N_NAME, ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2) AS REVENUE
+     2  -  SORT KEY : "ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2) DESC NULLS LAST"
+           RECORD COLUMN : NATION.N_NAME
+           READ KEY COLUMN : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2)
+           READ RECORD COLUMN : NATION.N_NAME
+     3  -  SQL : SELECT /*+ USE_GROUP_HASH(25) KEEP_JOINED_TABLE USE_HASH_IN( _A1, 10000 ) USE_NL_IN( _A2 ) USE_HASH_IN( _A3, 15000 ) FULL( _A4 ) USE_NL_IN( _A5 ) USE_NL_IN( _A6 ) FULL( _A7 ) INDEX( _A6, "PUBLIC"."NATION_REGIONKEY_FK" ) INDEX( _A5, "PUBLIC"."CUSTOMER_NATIONKEY_FK" ) INDEX( _A2, "PUBLIC"."LINEITEM_ORDERKEY_FK" ) FULL( _A1 ) */ "_A6"."N_NAME", SUM( "_A2"."L_EXTENDEDPRICE" * (:_V0 - "_A2"."L_DISCOUNT") ) FROM ( ( ( "PUBLIC"."ORDERS"@LOCAL AS "_A4" INNER JOIN ( ( "PUBLIC"."REGION"@LOCAL AS "_A7" INNER JOIN "PUBLIC"."NATION"@LOCAL AS "_A6" ON true ) ALIAS "_A8" INNER JOIN "PUBLIC"."CUSTOMER"@LOCAL AS "_A5" ON true ) ALIAS "_A3" ON "_A5"."C_CUSTKEY" = "_A4"."O_CUSTKEY") ALIAS "_A9" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A2" ON true ) ALIAS "_A10" INNER JOIN "PUBLIC"."SUPPLIER"@LOCAL AS "_A1" ON "_A1"."S_SUPPKEY" = "_A2"."L_SUPPKEY" AND "_A1"."S_NATIONKEY" = "_A6"."N_NATIONKEY") ALIAS "_A11" WHERE "_A4"."O_ORDERDATE" < :_V1 AND "_A4"."O_ORDERDATE" >= :_V2 AND "_A7"."R_NAME" = :_V3 AND "_A6"."N_REGIONKEY" = "_A7"."R_REGIONKEY" AND "_A5"."C_NATIONKEY" = "_A6"."N_NATIONKEY" AND "_A2"."L_ORDERKEY" = "_A4"."O_ORDERKEY" GROUP BY "_A6"."N_NAME"
+           TARGET DOMAIN : G1(G1N1) 5 rows, G2(G2N1) 5 rows
+           RE-GROUPING
+             GROUP KEY : NATION.N_NAME
+             AGGREGATION : SUM( SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ) )
+     5  -  TARGET : _A6.N_NAME, SUM( _A2.L_EXTENDEDPRICE * ( :_V0 - _A2.L_DISCOUNT ) )
+     6  -  GROUP KEY : _A6.N_NAME
+           RECORD COLUMN : SUM( _A2.L_EXTENDEDPRICE * ( :_V0 - _A2.L_DISCOUNT ) )
+           READ KEY COLUMN : _A6.N_NAME
+           READ RECORD COLUMN : SUM( _A2.L_EXTENDEDPRICE * ( :_V0 - _A2.L_DISCOUNT ) )
+     7  -  JOINED COLUMN : _A6.N_NAME, _A2.L_EXTENDEDPRICE, _A2.L_DISCOUNT
+     8  -  JOINED COLUMN : _A2.L_SUPPKEY, _A6.N_NATIONKEY, _A6.N_NAME, _A2.L_EXTENDEDPRICE, _A2.L_DISCOUNT
+             CONSTANT FILTER : TRUE
+     9  -  JOINED COLUMN : _A4.O_ORDERKEY, _A6.N_NATIONKEY, _A6.N_NAME
+    10  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : _A4.O_ORDERKEY, _A4.O_CUSTKEY, _A4.O_ORDERDATE
+             PHYSICAL FILTER : _A4.O_ORDERDATE < :_V1 AND _A4.O_ORDERDATE >= :_V2
+    11  -  HASH KEY : _A5.C_CUSTKEY
+           RECORD COLUMN : _A6.N_NATIONKEY, _A6.N_NAME
+           READ KEY COLUMN : _A5.C_CUSTKEY, _A6.N_NATIONKEY, _A6.N_NAME
+             HASH FILTER : _A5.C_CUSTKEY = _A4.O_CUSTKEY
+    12  -  JOINED COLUMN : _A5.C_CUSTKEY, _A6.N_NATIONKEY, _A6.N_NAME
+             CONSTANT FILTER : TRUE
+    13  -  JOINED COLUMN : _A6.N_NATIONKEY, _A6.N_NAME
+             CONSTANT FILTER : TRUE
+    14  -  CLONED 
+           READ COLUMN : _A7.R_REGIONKEY, _A7.R_NAME
+             PHYSICAL FILTER : _A7.R_NAME = :_V3
+    15  -  CLONED 
+           READ INDEX COLUMN : _A6.N_REGIONKEY
+           READ TABLE COLUMN : _A6.N_NATIONKEY, _A6.N_NAME
+             MIN RANGE : _A6.N_REGIONKEY = {_A7.R_REGIONKEY}
+             MAX RANGE : _A6.N_REGIONKEY = {_A7.R_REGIONKEY}
+    16  -  CLONED 
+           READ INDEX COLUMN : _A5.C_NATIONKEY
+           READ TABLE COLUMN : _A5.C_CUSTKEY
+             MIN RANGE : _A5.C_NATIONKEY = {_A6.N_NATIONKEY}
+             MAX RANGE : _A5.C_NATIONKEY = {_A6.N_NATIONKEY}
+    17  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A2.L_ORDERKEY
+           READ TABLE COLUMN : _A2.L_SUPPKEY, _A2.L_EXTENDEDPRICE, _A2.L_DISCOUNT
+             MIN RANGE : _A2.L_ORDERKEY = {_A4.O_ORDERKEY}
+             MAX RANGE : _A2.L_ORDERKEY = {_A4.O_ORDERKEY}
+    18  -  HASH KEY : _A1.S_SUPPKEY, _A1.S_NATIONKEY
+           READ KEY COLUMN : _A1.S_SUPPKEY, _A1.S_NATIONKEY
+             HASH FILTER : _A1.S_SUPPKEY = _A2.L_SUPPKEY AND _A1.S_NATIONKEY = _A6.N_NATIONKEY
+           FETCH ONE ROW
+    19  -  CLONED 
+           READ COLUMN : _A1.S_SUPPKEY, _A1.S_NATIONKEY
+
+<<<  end print plan
+
+
+Elapsed time: 229.87300 ms 
+
+
+--#################################
+--# Report
+--#################################
+
+\set timing off;
+INSERT INTO TPCH_SF1_REPORT 
+       VALUES ( 'SF1_Q05', (:VAR_ELAPSED_TIME__ / 1000), TRUNC( 60 * 60 * 1000 / :VAR_ELAPSED_TIME__, 0 ) );
+
+1 row created.
+
+COMMIT;
+
+Commit complete.
+

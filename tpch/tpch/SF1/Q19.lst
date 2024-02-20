@@ -1,0 +1,359 @@
+--####################################################################
+--# Discounted Revenue Query (Q19)
+--####################################################################
+
+--# The Discounted Revenue Query reports the gross discounted revenue 
+--# attributed to the sale of selected parts handled 
+--# in a particular manner. 
+--# This query is an example of code such as might be produced 
+--# programmatically by a data mining tool.
+
+--###############################
+--# Business Question
+--###############################
+
+--# The Discounted Revenue query finds the gross discounted revenue 
+--# for all orders for three different types of parts that were 
+--# shipped by air or delivered in person . 
+--# Parts are selected based on the combination of specific brands, 
+--# a list of containers, and a range of sizes.
+
+\explain plan
+select
+    ROUND( sum(l_extendedprice * (1 - l_discount) ), 2 ) as revenue
+from
+    lineitem,
+    part
+where
+    (
+            p_partkey = l_partkey
+        and p_brand = 'Brand#12'
+        and p_container in ( 'SM CASE', 'SM BOX', 'SM PACK', 'SM PKG')
+        and l_quantity >= 1 and l_quantity <= 1 + 10
+        and p_size between 1 and 5
+        and l_shipmode in ('AIR', 'AIR REG')
+        and l_shipinstruct = 'DELIVER IN PERSON'
+    )
+    or
+    (
+            p_partkey = l_partkey
+        and p_brand = 'Brand#23'
+        and p_container in ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK')
+        and l_quantity >= 10 and l_quantity <= 10 + 10
+        and p_size between 1 and 10
+        and l_shipmode in ('AIR', 'AIR REG')
+        and l_shipinstruct = 'DELIVER IN PERSON'
+    )
+    or
+    (
+            p_partkey = l_partkey
+        and p_brand = 'Brand#34'
+        and p_container in ( 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG')
+        and l_quantity >= 20 and l_quantity <= 20 + 10
+        and p_size between 1 and 15
+        and l_shipmode in ('AIR', 'AIR REG')
+        and l_shipinstruct = 'DELIVER IN PERSON'
+    );
+
+   REVENUE
+----------
+3083843.06
+
+1 row selected.
+
+>>>  start print plan
+
+< Execution Plan >
+========================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                                  |                    ROWS |
+------------------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                                  |                       1 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                       |                       1 |
+|    2  |      AGGREGATION BY HASH                                                           |                       1 |
+|    3  |        CONCAT (Compare Nothing)                                                    |                     121 |
+|    4  |          SINGLE CLUSTER                                                            | LOCAL/REMOTE         25 |
+|    5  |            CLUSTER PUSHER ("_$NI_7")                                               |                      88 |
+|    6  |              PLAN BASED CLUSTER                                                    | LOCAL/REMOTE         88 |
+|    7  |                TABLE ACCESS ("PART")                                               |                      48 |
+|    8  |            SELECT STATEMENT                                                        |                      17 |
+|    9  |              QUERY BLOCK ("$QB_IDX_2")                                             |                      17 |
+|   10  |                NESTED JOIN (INNER JOIN)                                            |                      17 |
+|   11  |                  PUSHER TABLE ACCESS ("_$NI_7" AS _A2)                             |                      88 |
+|   12  |                  INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_PARTKEY_SUPPKEY_FK")   | (      1298)         17 |
+|   13  |          SINGLE CLUSTER                                                            | LOCAL/REMOTE         40 |
+|   14  |            CLUSTER PUSHER ("_$NI_13")                                              |                     159 |
+|   15  |              PLAN BASED CLUSTER                                                    | LOCAL/REMOTE        159 |
+|   16  |                TABLE ACCESS ("PART")                                               |                      67 |
+|   17  |            SELECT STATEMENT                                                        |                      19 |
+|   18  |              QUERY BLOCK ("$QB_IDX_2")                                             |                      19 |
+|   19  |                NESTED JOIN (INNER JOIN)                                            |                      19 |
+|   20  |                  PUSHER TABLE ACCESS ("_$NI_13" AS _A2)                            |                     159 |
+|   21  |                  INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_PARTKEY_SUPPKEY_FK")   | (      2367)         19 |
+|   22  |          SINGLE CLUSTER                                                            | LOCAL/REMOTE         56 |
+|   23  |            CLUSTER PUSHER ("_$NI_19")                                              |                     238 |
+|   24  |              PLAN BASED CLUSTER                                                    | LOCAL/REMOTE        238 |
+|   25  |                TABLE ACCESS ("PART")                                               |                     117 |
+|   26  |            SELECT STATEMENT                                                        |                      24 |
+|   27  |              QUERY BLOCK ("$QB_IDX_2")                                             |                      24 |
+|   28  |                NESTED JOIN (INNER JOIN)                                            |                      24 |
+|   29  |                  PUSHER TABLE ACCESS ("_$NI_19" AS _A2)                            |                     238 |
+|   30  |                  INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_PARTKEY_SUPPKEY_FK")   | (      3514)         24 |
+========================================================================================================================
+
+     1  -  TARGET : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2) AS REVENUE
+     2  -  AGGREGATION : SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) )
+     3  -  CONCAT COLUMN : LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+     4  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_PARTKEY_SUPPKEY_FK" ) */ "_A1"."L_EXTENDEDPRICE", "_A1"."L_DISCOUNT" FROM ( "SESSION_SCHEMA"."_$NI_7"@LOCAL AS "_A2" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A1" ON true ) ALIAS "_A3" WHERE "_A1"."L_PARTKEY" = "_A2"."P_PARTKEY" AND "_A1"."L_QUANTITY" <= :_V0 AND "_A1"."L_QUANTITY" >= :_V1 AND "_A1"."L_SHIPINSTRUCT" = :_V2 AND ("_A1"."L_SHIPMODE") IN (:_V3,:_V4)
+           TARGET DOMAIN : G1(G1N1) 17 rows, G2(G2N1) 8 rows
+     5  -  SQL : DECLARE INSTANT TABLE "SESSION_SCHEMA"."_$NI_7" ( "P_PARTKEY" NUMBER(10, 0) ) 
+           COLUMN : PART.P_PARTKEY AS P_PARTKEY
+           CLONED
+           TARGET DOMAIN : G1(G1N1) 88 rows, G2(G2N1) 88 rows
+     6  -  SQL : SELECT /*+ FULL( _A1 ) */ "_A1"."P_PARTKEY" FROM "PUBLIC"."PART"@LOCAL AS "_A1" WHERE "_A1"."P_BRAND" = :_V0 AND "_A1"."P_SIZE" <= :_V1 AND "_A1"."P_SIZE" >= :_V2 AND ("_A1"."P_CONTAINER") IN (:_V3,:_V4,:_V5,:_V6)
+           TARGET DOMAIN : G1(G1N1) 48 rows, G2(G2N1) 40 rows
+     7  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : PART.P_PARTKEY, PART.P_BRAND, PART.P_SIZE, PART.P_CONTAINER
+             PHYSICAL FILTER : PART.P_BRAND = 'Brand#12' AND PART.P_SIZE <= 5 AND PART.P_SIZE >= 1 AND ( PART.P_CONTAINER ) IN ( 'SM CASE', 'SM BOX', 'SM PACK', 'SM PKG' )
+     9  -  TARGET : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+    10  -  JOINED COLUMN : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+             CONSTANT FILTER : TRUE
+    11  -  READ COLUMN : _A2.P_PARTKEY
+    12  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_PARTKEY
+           READ TABLE COLUMN : _A1.L_QUANTITY, _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT, _A1.L_SHIPINSTRUCT, _A1.L_SHIPMODE
+             MIN RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             MAX RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             PHYSICAL TABLE FILTER : _A1.L_QUANTITY <= :_V0 AND _A1.L_QUANTITY >= :_V1 AND _A1.L_SHIPINSTRUCT = :_V2 AND ( _A1.L_SHIPMODE ) IN ( :_V3, :_V4 )
+    13  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_PARTKEY_SUPPKEY_FK" ) */ "_A1"."L_EXTENDEDPRICE", "_A1"."L_DISCOUNT" FROM ( "SESSION_SCHEMA"."_$NI_13"@LOCAL AS "_A2" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A1" ON true ) ALIAS "_A3" WHERE "_A1"."L_PARTKEY" = "_A2"."P_PARTKEY" AND "_A1"."L_QUANTITY" <= :_V0 AND "_A1"."L_QUANTITY" >= :_V1 AND "_A1"."L_SHIPINSTRUCT" = :_V2 AND ("_A1"."L_SHIPMODE") IN (:_V3,:_V4)
+           TARGET DOMAIN : G1(G1N1) 19 rows, G2(G2N1) 21 rows
+    14  -  SQL : DECLARE INSTANT TABLE "SESSION_SCHEMA"."_$NI_13" ( "P_PARTKEY" NUMBER(10, 0) ) 
+           COLUMN : PART.P_PARTKEY AS P_PARTKEY
+           CLONED
+           TARGET DOMAIN : G1(G1N1) 159 rows, G2(G2N1) 159 rows
+    15  -  SQL : SELECT /*+ FULL( _A1 ) */ "_A1"."P_PARTKEY" FROM "PUBLIC"."PART"@LOCAL AS "_A1" WHERE "_A1"."P_BRAND" = :_V0 AND "_A1"."P_SIZE" <= :_V1 AND "_A1"."P_SIZE" >= :_V2 AND ("_A1"."P_CONTAINER") IN (:_V3,:_V4,:_V5,:_V6)
+           TARGET DOMAIN : G1(G1N1) 67 rows, G2(G2N1) 92 rows
+    16  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : PART.P_PARTKEY, PART.P_BRAND, PART.P_SIZE, PART.P_CONTAINER
+             PHYSICAL FILTER : PART.P_BRAND = 'Brand#23' AND PART.P_SIZE <= 10 AND PART.P_SIZE >= 1 AND ( PART.P_CONTAINER ) IN ( 'MED BAG', 'MED BOX', 'MED PKG', 'MED PACK' )
+    18  -  TARGET : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+    19  -  JOINED COLUMN : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+             CONSTANT FILTER : TRUE
+    20  -  READ COLUMN : _A2.P_PARTKEY
+    21  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_PARTKEY
+           READ TABLE COLUMN : _A1.L_QUANTITY, _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT, _A1.L_SHIPINSTRUCT, _A1.L_SHIPMODE
+             MIN RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             MAX RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             PHYSICAL TABLE FILTER : _A1.L_QUANTITY <= :_V0 AND _A1.L_QUANTITY >= :_V1 AND _A1.L_SHIPINSTRUCT = :_V2 AND ( _A1.L_SHIPMODE ) IN ( :_V3, :_V4 )
+    22  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_PARTKEY_SUPPKEY_FK" ) */ "_A1"."L_EXTENDEDPRICE", "_A1"."L_DISCOUNT" FROM ( "SESSION_SCHEMA"."_$NI_19"@LOCAL AS "_A2" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A1" ON true ) ALIAS "_A3" WHERE "_A1"."L_PARTKEY" = "_A2"."P_PARTKEY" AND "_A1"."L_QUANTITY" <= :_V0 AND "_A1"."L_QUANTITY" >= :_V1 AND "_A1"."L_SHIPINSTRUCT" = :_V2 AND ("_A1"."L_SHIPMODE") IN (:_V3,:_V4)
+           TARGET DOMAIN : G1(G1N1) 24 rows, G2(G2N1) 32 rows
+    23  -  SQL : DECLARE INSTANT TABLE "SESSION_SCHEMA"."_$NI_19" ( "P_PARTKEY" NUMBER(10, 0) ) 
+           COLUMN : PART.P_PARTKEY AS P_PARTKEY
+           CLONED
+           TARGET DOMAIN : G1(G1N1) 238 rows, G2(G2N1) 238 rows
+    24  -  SQL : SELECT /*+ FULL( _A1 ) */ "_A1"."P_PARTKEY" FROM "PUBLIC"."PART"@LOCAL AS "_A1" WHERE "_A1"."P_BRAND" = :_V0 AND "_A1"."P_SIZE" <= :_V1 AND "_A1"."P_SIZE" >= :_V2 AND ("_A1"."P_CONTAINER") IN (:_V3,:_V4,:_V5,:_V6)
+           TARGET DOMAIN : G1(G1N1) 117 rows, G2(G2N1) 121 rows
+    25  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : PART.P_PARTKEY, PART.P_BRAND, PART.P_SIZE, PART.P_CONTAINER
+             PHYSICAL FILTER : PART.P_BRAND = 'Brand#34' AND PART.P_SIZE <= 15 AND PART.P_SIZE >= 1 AND ( PART.P_CONTAINER ) IN ( 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG' )
+    27  -  TARGET : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+    28  -  JOINED COLUMN : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+             CONSTANT FILTER : TRUE
+    29  -  READ COLUMN : _A2.P_PARTKEY
+    30  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_PARTKEY
+           READ TABLE COLUMN : _A1.L_QUANTITY, _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT, _A1.L_SHIPINSTRUCT, _A1.L_SHIPMODE
+             MIN RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             MAX RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             PHYSICAL TABLE FILTER : _A1.L_QUANTITY <= :_V0 AND _A1.L_QUANTITY >= :_V1 AND _A1.L_SHIPINSTRUCT = :_V2 AND ( _A1.L_SHIPMODE ) IN ( :_V3, :_V4 )
+
+<<<  end print plan
+
+
+
+--###############################
+--# Functional Query Definition
+--###############################
+
+\set linesize 400
+\set timing on;
+
+--# result: 1 rows
+--#    revenue    
+--# --------------
+--#  3083843.06
+
+\explain plan
+select
+    ROUND( sum(l_extendedprice * (1 - l_discount) ), 2 ) as revenue
+from
+    lineitem,
+    part
+where
+    (
+            p_partkey = l_partkey
+        and p_brand = 'Brand#12'
+        and p_container in ( 'SM CASE', 'SM BOX', 'SM PACK', 'SM PKG')
+        and l_quantity >= 1 and l_quantity <= 1 + 10
+        and p_size between 1 and 5
+        and l_shipmode in ('AIR', 'AIR REG')
+        and l_shipinstruct = 'DELIVER IN PERSON'
+    )
+    or
+    (
+            p_partkey = l_partkey
+        and p_brand = 'Brand#23'
+        and p_container in ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK')
+        and l_quantity >= 10 and l_quantity <= 10 + 10
+        and p_size between 1 and 10
+        and l_shipmode in ('AIR', 'AIR REG')
+        and l_shipinstruct = 'DELIVER IN PERSON'
+    )
+    or
+    (
+            p_partkey = l_partkey
+        and p_brand = 'Brand#34'
+        and p_container in ( 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG')
+        and l_quantity >= 20 and l_quantity <= 20 + 10
+        and p_size between 1 and 15
+        and l_shipmode in ('AIR', 'AIR REG')
+        and l_shipinstruct = 'DELIVER IN PERSON'
+    );
+
+   REVENUE
+----------
+3083843.06
+
+1 row selected.
+
+>>>  start print plan
+
+< Execution Plan >
+========================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                                  |                    ROWS |
+------------------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                                  |                       1 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                       |                       1 |
+|    2  |      AGGREGATION BY HASH                                                           |                       1 |
+|    3  |        CONCAT (Compare Nothing)                                                    |                     121 |
+|    4  |          SINGLE CLUSTER                                                            | LOCAL/REMOTE         25 |
+|    5  |            CLUSTER PUSHER ("_$NI_7")                                               |                      88 |
+|    6  |              PLAN BASED CLUSTER                                                    | LOCAL/REMOTE         88 |
+|    7  |                TABLE ACCESS ("PART")                                               |                      48 |
+|    8  |            SELECT STATEMENT                                                        |                      17 |
+|    9  |              QUERY BLOCK ("$QB_IDX_2")                                             |                      17 |
+|   10  |                NESTED JOIN (INNER JOIN)                                            |                      17 |
+|   11  |                  PUSHER TABLE ACCESS ("_$NI_7" AS _A2)                             |                      88 |
+|   12  |                  INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_PARTKEY_SUPPKEY_FK")   | (      1298)         17 |
+|   13  |          SINGLE CLUSTER                                                            | LOCAL/REMOTE         40 |
+|   14  |            CLUSTER PUSHER ("_$NI_13")                                              |                     159 |
+|   15  |              PLAN BASED CLUSTER                                                    | LOCAL/REMOTE        159 |
+|   16  |                TABLE ACCESS ("PART")                                               |                      67 |
+|   17  |            SELECT STATEMENT                                                        |                      19 |
+|   18  |              QUERY BLOCK ("$QB_IDX_2")                                             |                      19 |
+|   19  |                NESTED JOIN (INNER JOIN)                                            |                      19 |
+|   20  |                  PUSHER TABLE ACCESS ("_$NI_13" AS _A2)                            |                     159 |
+|   21  |                  INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_PARTKEY_SUPPKEY_FK")   | (      2367)         19 |
+|   22  |          SINGLE CLUSTER                                                            | LOCAL/REMOTE         56 |
+|   23  |            CLUSTER PUSHER ("_$NI_19")                                              |                     238 |
+|   24  |              PLAN BASED CLUSTER                                                    | LOCAL/REMOTE        238 |
+|   25  |                TABLE ACCESS ("PART")                                               |                     117 |
+|   26  |            SELECT STATEMENT                                                        |                      24 |
+|   27  |              QUERY BLOCK ("$QB_IDX_2")                                             |                      24 |
+|   28  |                NESTED JOIN (INNER JOIN)                                            |                      24 |
+|   29  |                  PUSHER TABLE ACCESS ("_$NI_19" AS _A2)                            |                     238 |
+|   30  |                  INDEX ACCESS ("LINEITEM" AS _A1, "LINEITEM_PARTKEY_SUPPKEY_FK")   | (      3514)         24 |
+========================================================================================================================
+
+     1  -  TARGET : ROUND(SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) ),2) AS REVENUE
+     2  -  AGGREGATION : SUM( LINEITEM.L_EXTENDEDPRICE * ( 1 - LINEITEM.L_DISCOUNT ) )
+     3  -  CONCAT COLUMN : LINEITEM.L_EXTENDEDPRICE, LINEITEM.L_DISCOUNT
+     4  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_PARTKEY_SUPPKEY_FK" ) */ "_A1"."L_EXTENDEDPRICE", "_A1"."L_DISCOUNT" FROM ( "SESSION_SCHEMA"."_$NI_7"@LOCAL AS "_A2" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A1" ON true ) ALIAS "_A3" WHERE "_A1"."L_PARTKEY" = "_A2"."P_PARTKEY" AND "_A1"."L_QUANTITY" <= :_V0 AND "_A1"."L_QUANTITY" >= :_V1 AND "_A1"."L_SHIPINSTRUCT" = :_V2 AND ("_A1"."L_SHIPMODE") IN (:_V3,:_V4)
+           TARGET DOMAIN : G1(G1N1) 17 rows, G2(G2N1) 8 rows
+     5  -  SQL : DECLARE INSTANT TABLE "SESSION_SCHEMA"."_$NI_7" ( "P_PARTKEY" NUMBER(10, 0) ) 
+           COLUMN : PART.P_PARTKEY AS P_PARTKEY
+           CLONED
+           TARGET DOMAIN : G1(G1N1) 88 rows, G2(G2N1) 88 rows
+     6  -  SQL : SELECT /*+ FULL( _A1 ) */ "_A1"."P_PARTKEY" FROM "PUBLIC"."PART"@LOCAL AS "_A1" WHERE "_A1"."P_BRAND" = :_V0 AND "_A1"."P_SIZE" <= :_V1 AND "_A1"."P_SIZE" >= :_V2 AND ("_A1"."P_CONTAINER") IN (:_V3,:_V4,:_V5,:_V6)
+           TARGET DOMAIN : G1(G1N1) 48 rows, G2(G2N1) 40 rows
+     7  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : PART.P_PARTKEY, PART.P_BRAND, PART.P_SIZE, PART.P_CONTAINER
+             PHYSICAL FILTER : PART.P_BRAND = 'Brand#12' AND PART.P_SIZE <= 5 AND PART.P_SIZE >= 1 AND ( PART.P_CONTAINER ) IN ( 'SM CASE', 'SM BOX', 'SM PACK', 'SM PKG' )
+     9  -  TARGET : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+    10  -  JOINED COLUMN : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+             CONSTANT FILTER : TRUE
+    11  -  READ COLUMN : _A2.P_PARTKEY
+    12  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_PARTKEY
+           READ TABLE COLUMN : _A1.L_QUANTITY, _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT, _A1.L_SHIPINSTRUCT, _A1.L_SHIPMODE
+             MIN RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             MAX RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             PHYSICAL TABLE FILTER : _A1.L_QUANTITY <= :_V0 AND _A1.L_QUANTITY >= :_V1 AND _A1.L_SHIPINSTRUCT = :_V2 AND ( _A1.L_SHIPMODE ) IN ( :_V3, :_V4 )
+    13  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_PARTKEY_SUPPKEY_FK" ) */ "_A1"."L_EXTENDEDPRICE", "_A1"."L_DISCOUNT" FROM ( "SESSION_SCHEMA"."_$NI_13"@LOCAL AS "_A2" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A1" ON true ) ALIAS "_A3" WHERE "_A1"."L_PARTKEY" = "_A2"."P_PARTKEY" AND "_A1"."L_QUANTITY" <= :_V0 AND "_A1"."L_QUANTITY" >= :_V1 AND "_A1"."L_SHIPINSTRUCT" = :_V2 AND ("_A1"."L_SHIPMODE") IN (:_V3,:_V4)
+           TARGET DOMAIN : G1(G1N1) 19 rows, G2(G2N1) 21 rows
+    14  -  SQL : DECLARE INSTANT TABLE "SESSION_SCHEMA"."_$NI_13" ( "P_PARTKEY" NUMBER(10, 0) ) 
+           COLUMN : PART.P_PARTKEY AS P_PARTKEY
+           CLONED
+           TARGET DOMAIN : G1(G1N1) 159 rows, G2(G2N1) 159 rows
+    15  -  SQL : SELECT /*+ FULL( _A1 ) */ "_A1"."P_PARTKEY" FROM "PUBLIC"."PART"@LOCAL AS "_A1" WHERE "_A1"."P_BRAND" = :_V0 AND "_A1"."P_SIZE" <= :_V1 AND "_A1"."P_SIZE" >= :_V2 AND ("_A1"."P_CONTAINER") IN (:_V3,:_V4,:_V5,:_V6)
+           TARGET DOMAIN : G1(G1N1) 67 rows, G2(G2N1) 92 rows
+    16  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : PART.P_PARTKEY, PART.P_BRAND, PART.P_SIZE, PART.P_CONTAINER
+             PHYSICAL FILTER : PART.P_BRAND = 'Brand#23' AND PART.P_SIZE <= 10 AND PART.P_SIZE >= 1 AND ( PART.P_CONTAINER ) IN ( 'MED BAG', 'MED BOX', 'MED PKG', 'MED PACK' )
+    18  -  TARGET : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+    19  -  JOINED COLUMN : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+             CONSTANT FILTER : TRUE
+    20  -  READ COLUMN : _A2.P_PARTKEY
+    21  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_PARTKEY
+           READ TABLE COLUMN : _A1.L_QUANTITY, _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT, _A1.L_SHIPINSTRUCT, _A1.L_SHIPMODE
+             MIN RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             MAX RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             PHYSICAL TABLE FILTER : _A1.L_QUANTITY <= :_V0 AND _A1.L_QUANTITY >= :_V1 AND _A1.L_SHIPINSTRUCT = :_V2 AND ( _A1.L_SHIPMODE ) IN ( :_V3, :_V4 )
+    22  -  SQL : SELECT /*+ KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."LINEITEM_PARTKEY_SUPPKEY_FK" ) */ "_A1"."L_EXTENDEDPRICE", "_A1"."L_DISCOUNT" FROM ( "SESSION_SCHEMA"."_$NI_19"@LOCAL AS "_A2" INNER JOIN "PUBLIC"."LINEITEM"@LOCAL AS "_A1" ON true ) ALIAS "_A3" WHERE "_A1"."L_PARTKEY" = "_A2"."P_PARTKEY" AND "_A1"."L_QUANTITY" <= :_V0 AND "_A1"."L_QUANTITY" >= :_V1 AND "_A1"."L_SHIPINSTRUCT" = :_V2 AND ("_A1"."L_SHIPMODE") IN (:_V3,:_V4)
+           TARGET DOMAIN : G1(G1N1) 24 rows, G2(G2N1) 32 rows
+    23  -  SQL : DECLARE INSTANT TABLE "SESSION_SCHEMA"."_$NI_19" ( "P_PARTKEY" NUMBER(10, 0) ) 
+           COLUMN : PART.P_PARTKEY AS P_PARTKEY
+           CLONED
+           TARGET DOMAIN : G1(G1N1) 238 rows, G2(G2N1) 238 rows
+    24  -  SQL : SELECT /*+ FULL( _A1 ) */ "_A1"."P_PARTKEY" FROM "PUBLIC"."PART"@LOCAL AS "_A1" WHERE "_A1"."P_BRAND" = :_V0 AND "_A1"."P_SIZE" <= :_V1 AND "_A1"."P_SIZE" >= :_V2 AND ("_A1"."P_CONTAINER") IN (:_V3,:_V4,:_V5,:_V6)
+           TARGET DOMAIN : G1(G1N1) 117 rows, G2(G2N1) 121 rows
+    25  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : PART.P_PARTKEY, PART.P_BRAND, PART.P_SIZE, PART.P_CONTAINER
+             PHYSICAL FILTER : PART.P_BRAND = 'Brand#34' AND PART.P_SIZE <= 15 AND PART.P_SIZE >= 1 AND ( PART.P_CONTAINER ) IN ( 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG' )
+    27  -  TARGET : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+    28  -  JOINED COLUMN : _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT
+             CONSTANT FILTER : TRUE
+    29  -  READ COLUMN : _A2.P_PARTKEY
+    30  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.L_PARTKEY
+           READ TABLE COLUMN : _A1.L_QUANTITY, _A1.L_EXTENDEDPRICE, _A1.L_DISCOUNT, _A1.L_SHIPINSTRUCT, _A1.L_SHIPMODE
+             MIN RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             MAX RANGE : _A1.L_PARTKEY = {_A2.P_PARTKEY}
+             PHYSICAL TABLE FILTER : _A1.L_QUANTITY <= :_V0 AND _A1.L_QUANTITY >= :_V1 AND _A1.L_SHIPINSTRUCT = :_V2 AND ( _A1.L_SHIPMODE ) IN ( :_V3, :_V4 )
+
+<<<  end print plan
+
+
+Elapsed time: 38.63800 ms 
+
+
+--#################################
+--# Report
+--#################################
+
+\set timing off;
+
+INSERT INTO TPCH_SF1_REPORT 
+       VALUES ( 'SF1_Q19', (:VAR_ELAPSED_TIME__ / 1000), TRUNC( 60 * 60 * 1000 / :VAR_ELAPSED_TIME__, 0 ) );
+
+1 row created.
+
+
+COMMIT;
+
+Commit complete.
+
+
+
+

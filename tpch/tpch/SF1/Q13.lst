@@ -1,0 +1,315 @@
+--####################################################################
+--# Customer Distribution Query (Q13)
+--####################################################################
+
+--# This query seeks relationships between customers and the size of 
+--# their orders.
+
+--###############################
+--# Business Question
+--###############################
+
+--# This query determines the distribution of customers by the number 
+--# of orders they have made, including customers who have no record 
+--# of orders, past or present. 
+--# It counts and reports how many customers have no orders, 
+--# how many have 1, 2, 3, etc. 
+--# A check is made to ensure that the orders counted do not fall 
+--# into one of several special categories of orders. 
+--# Special categories are identified in the order comment column 
+--# by looking for a particular pattern.
+
+\explain plan
+select
+    c_count, 
+    count(*) as custdist
+from (
+       select
+           c_custkey,
+           count(o_orderkey) as c_count
+       from
+            customer left outer join orders 
+            on c_custkey = o_custkey
+            and o_comment not like '%special%requests%'
+       group by
+           c_custkey
+     ) c_orders
+group by
+    c_count
+order by
+    custdist desc,
+    c_count desc;
+
+C_COUNT CUSTDIST
+------- --------
+      0    50005
+      9     6641
+     10     6532
+     11     6014
+      8     5937
+     12     5639
+     13     5024
+     19     4793
+      7     4687
+     17     4587
+     18     4529
+     20     4516
+     15     4505
+     14     4446
+     16     4273
+     21     4190
+     22     3623
+      6     3265
+     23     3225
+     24     2742
+
+C_COUNT CUSTDIST
+------- --------
+     25     2086
+      5     1948
+     26     1612
+     27     1179
+      4     1007
+     28      893
+     29      593
+      3      415
+     30      376
+     31      226
+     32      148
+      2      134
+     33       75
+     34       50
+     35       37
+      1       17
+     36       14
+     38        5
+     37        5
+     40        4
+
+C_COUNT CUSTDIST
+------- --------
+     41        2
+     39        1
+
+42 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+======================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                                |                    ROWS |
+----------------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                                |                      42 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                     |                      42 |
+|    2  |      SORT INSTANT                                                                |                      42 |
+|    3  |        GROUP HASH INSTANT                                                        |                      42 |
+|    4  |          INLINE_VIEW ("C_ORDERS")                                                |                  150000 |
+|    5  |            QUERY BLOCK ("$QB_IDX_5")                                             |                  150000 |
+|    6  |              SINGLE CLUSTER                                                      | LOCAL/REMOTE     150000 |
+|    7  |                SELECT STATEMENT                                                  |                  150000 |
+|    8  |                  QUERY BLOCK ("$QB_IDX_2")                                       |                  150000 |
+|    9  |                    GROUP HASH INSTANT                                            |                  150000 |
+|   10  |                      HASH JOIN (INVERTED LEFT OUTER JOIN)                        |                  794648 |
+|   11  |                        TABLE ACCESS ("ORDERS" AS _A2)                            |                  744289 |
+|   12  |                        HASH JOIN INSTANT                                         |                  794648 |
+|   13  |                          INDEX ACCESS ("CUSTOMER" AS _A1, "CUSTOMER_PK_INDEX")   | (    150000)     150000 |
+======================================================================================================================
+
+     1  -  TARGET : C_ORDERS.C_COUNT, COUNT(*) AS CUSTDIST
+     2  -  SORT KEY : "COUNT(*) DESC NULLS LAST", "C_ORDERS.C_COUNT DESC NULLS LAST"
+           READ KEY COLUMN : COUNT(*), C_ORDERS.C_COUNT
+     3  -  GROUP KEY : C_ORDERS.C_COUNT
+           RECORD COLUMN : COUNT(*)
+           READ KEY COLUMN : C_ORDERS.C_COUNT
+           READ RECORD COLUMN : COUNT(*)
+     4  -  COLUMN : C_COUNT AS C_COUNT
+     5  -  TARGET : COUNT( ORDERS.O_ORDERKEY ) AS C_COUNT
+     6  -  SQL : SELECT /*+ USE_GROUP_HASH(150000) KEEP_JOINED_TABLE USE_HASH_IN( _A1, 150000 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."CUSTOMER_PK_INDEX" ) */ "_A1"."C_CUSTKEY", COUNT( "_A2"."O_ORDERKEY" ) FROM ( "PUBLIC"."CUSTOMER"@"G1N1"|"G2N1" AS "_A1" LEFT OUTER JOIN "PUBLIC"."ORDERS"@"G1N1"|"G2N1" AS "_A2" ON "_A1"."C_CUSTKEY" = "_A2"."O_CUSTKEY" AND "_A2"."O_COMMENT" NOT LIKE :_V0) ALIAS "_A3" GROUP BY "_A1"."C_CUSTKEY"
+           TARGET DOMAIN : G1(G1N1) 150000 rows, G2(G2N1) 150000 rows
+           RE-GROUPING
+             GROUP KEY : CUSTOMER.C_CUSTKEY
+             AGGREGATION : SUM( COUNT( ORDERS.O_ORDERKEY ) )
+     8  -  TARGET : _A1.C_CUSTKEY, COUNT( _A2.O_ORDERKEY )
+     9  -  GROUP KEY : _A1.C_CUSTKEY
+           RECORD COLUMN : COUNT( _A2.O_ORDERKEY )
+           READ KEY COLUMN : _A1.C_CUSTKEY
+           READ RECORD COLUMN : COUNT( _A2.O_ORDERKEY )
+    10  -  JOINED COLUMN : _A1.C_CUSTKEY, _A2.O_ORDERKEY
+    11  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : _A2.O_ORDERKEY, _A2.O_CUSTKEY, _A2.O_COMMENT
+             NODE FILTER : _A2.O_COMMENT NOT LIKE :_V0
+    12  -  HASH KEY : _A1.C_CUSTKEY
+           READ KEY COLUMN : _A1.C_CUSTKEY
+             HASH FILTER : _A1.C_CUSTKEY = _A2.O_CUSTKEY
+    13  -  CLONED 
+           READ INDEX COLUMN : _A1.C_CUSTKEY
+
+<<<  end print plan
+
+
+
+--###############################
+--# Functional Query Definition
+--###############################
+
+\set linesize 400
+\set timing on;
+
+--# result: 42 rows
+--#  c_count | custdist 
+--# ---------+----------
+--#        0 |    50005
+--#        9 |     6641
+--#       10 |     6532
+--# .....
+--# .....
+--# .....
+--#       40 |        4
+--#       41 |        2
+--#       39 |        1
+\explain plan
+select
+    c_count, 
+    count(*) as custdist
+from (
+       select
+           c_custkey,
+           count(o_orderkey) as c_count
+       from
+            customer left outer join orders 
+            on c_custkey = o_custkey
+            and o_comment not like '%special%requests%'
+       group by
+           c_custkey
+     ) c_orders
+group by
+    c_count
+order by
+    custdist desc,
+    c_count desc;
+
+C_COUNT CUSTDIST
+------- --------
+      0    50005
+      9     6641
+     10     6532
+     11     6014
+      8     5937
+     12     5639
+     13     5024
+     19     4793
+      7     4687
+     17     4587
+     18     4529
+     20     4516
+     15     4505
+     14     4446
+     16     4273
+     21     4190
+     22     3623
+      6     3265
+     23     3225
+     24     2742
+
+C_COUNT CUSTDIST
+------- --------
+     25     2086
+      5     1948
+     26     1612
+     27     1179
+      4     1007
+     28      893
+     29      593
+      3      415
+     30      376
+     31      226
+     32      148
+      2      134
+     33       75
+     34       50
+     35       37
+      1       17
+     36       14
+     38        5
+     37        5
+     40        4
+
+C_COUNT CUSTDIST
+------- --------
+     41        2
+     39        1
+
+42 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+======================================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                                |                    ROWS |
+----------------------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                                |                      42 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                                     |                      42 |
+|    2  |      SORT INSTANT                                                                |                      42 |
+|    3  |        GROUP HASH INSTANT                                                        |                      42 |
+|    4  |          INLINE_VIEW ("C_ORDERS")                                                |                  150000 |
+|    5  |            QUERY BLOCK ("$QB_IDX_5")                                             |                  150000 |
+|    6  |              SINGLE CLUSTER                                                      | LOCAL/REMOTE     150000 |
+|    7  |                SELECT STATEMENT                                                  |                  150000 |
+|    8  |                  QUERY BLOCK ("$QB_IDX_2")                                       |                  150000 |
+|    9  |                    GROUP HASH INSTANT                                            |                  150000 |
+|   10  |                      HASH JOIN (INVERTED LEFT OUTER JOIN)                        |                  794648 |
+|   11  |                        TABLE ACCESS ("ORDERS" AS _A2)                            |                  744289 |
+|   12  |                        HASH JOIN INSTANT                                         |                  794648 |
+|   13  |                          INDEX ACCESS ("CUSTOMER" AS _A1, "CUSTOMER_PK_INDEX")   | (    150000)     150000 |
+======================================================================================================================
+
+     1  -  TARGET : C_ORDERS.C_COUNT, COUNT(*) AS CUSTDIST
+     2  -  SORT KEY : "COUNT(*) DESC NULLS LAST", "C_ORDERS.C_COUNT DESC NULLS LAST"
+           READ KEY COLUMN : COUNT(*), C_ORDERS.C_COUNT
+     3  -  GROUP KEY : C_ORDERS.C_COUNT
+           RECORD COLUMN : COUNT(*)
+           READ KEY COLUMN : C_ORDERS.C_COUNT
+           READ RECORD COLUMN : COUNT(*)
+     4  -  COLUMN : C_COUNT AS C_COUNT
+     5  -  TARGET : COUNT( ORDERS.O_ORDERKEY ) AS C_COUNT
+     6  -  SQL : SELECT /*+ USE_GROUP_HASH(150000) KEEP_JOINED_TABLE USE_HASH_IN( _A1, 150000 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."CUSTOMER_PK_INDEX" ) */ "_A1"."C_CUSTKEY", COUNT( "_A2"."O_ORDERKEY" ) FROM ( "PUBLIC"."CUSTOMER"@"G1N1"|"G2N1" AS "_A1" LEFT OUTER JOIN "PUBLIC"."ORDERS"@"G1N1"|"G2N1" AS "_A2" ON "_A1"."C_CUSTKEY" = "_A2"."O_CUSTKEY" AND "_A2"."O_COMMENT" NOT LIKE :_V0) ALIAS "_A3" GROUP BY "_A1"."C_CUSTKEY"
+           TARGET DOMAIN : G1(G1N1) 150000 rows, G2(G2N1) 150000 rows
+           RE-GROUPING
+             GROUP KEY : CUSTOMER.C_CUSTKEY
+             AGGREGATION : SUM( COUNT( ORDERS.O_ORDERKEY ) )
+     8  -  TARGET : _A1.C_CUSTKEY, COUNT( _A2.O_ORDERKEY )
+     9  -  GROUP KEY : _A1.C_CUSTKEY
+           RECORD COLUMN : COUNT( _A2.O_ORDERKEY )
+           READ KEY COLUMN : _A1.C_CUSTKEY
+           READ RECORD COLUMN : COUNT( _A2.O_ORDERKEY )
+    10  -  JOINED COLUMN : _A1.C_CUSTKEY, _A2.O_ORDERKEY
+    11  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : _A2.O_ORDERKEY, _A2.O_CUSTKEY, _A2.O_COMMENT
+             NODE FILTER : _A2.O_COMMENT NOT LIKE :_V0
+    12  -  HASH KEY : _A1.C_CUSTKEY
+           READ KEY COLUMN : _A1.C_CUSTKEY
+             HASH FILTER : _A1.C_CUSTKEY = _A2.O_CUSTKEY
+    13  -  CLONED 
+           READ INDEX COLUMN : _A1.C_CUSTKEY
+
+<<<  end print plan
+
+
+Elapsed time: 614.80500 ms 
+
+
+--#################################
+--# Report
+--#################################
+
+\set timing off;
+
+INSERT INTO TPCH_SF1_REPORT 
+       VALUES ( 'SF1_Q13', (:VAR_ELAPSED_TIME__ / 1000), TRUNC( 60 * 60 * 1000 / :VAR_ELAPSED_TIME__, 0 ) );
+
+1 row created.
+
+COMMIT;
+
+Commit complete.
+

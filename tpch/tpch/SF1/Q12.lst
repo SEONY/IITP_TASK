@@ -1,0 +1,225 @@
+--####################################################################
+--# Shipping Modes and Order Priority Query (Q12)
+--####################################################################
+
+--# This query determines whether selecting less expensive modes of 
+--# shipping is negatively affecting the critical-prior-ity 
+--# orders by causing more parts to be received by customers 
+--# after the committed date.
+
+--###############################
+--# Business Question
+--###############################
+
+--# The Shipping Modes and Order Priority Query counts, by ship mode, 
+--# for lineitems actually received by customers in a given year, 
+--# the number of lineitems belonging to orders for which the 
+--# l_receiptdate exceeds the l_commitdate for two different specified 
+--# ship modes. 
+--# Only lineitems that were actually shipped before the l_commitdate 
+--# are con-sidered. 
+--# The late lineitems are partitioned into two groups, those with 
+--# priority URGENT or HIGH, and those with a priority other than 
+--# URGENT or HIGH.
+
+\explain plan 
+select
+    l_shipmode,
+    sum( case
+             when o_orderpriority ='1-URGENT'
+                  or o_orderpriority ='2-HIGH'
+             then 1
+             else 0
+         end ) as high_line_count,
+    sum( case
+             when o_orderpriority <> '1-URGENT'
+              and o_orderpriority <> '2-HIGH'
+             then 1
+             else 0
+         end ) as low_line_count
+from
+    orders,
+    lineitem
+where
+      o_orderkey = l_orderkey
+  and l_shipmode in ('MAIL', 'SHIP')
+  and l_commitdate < l_receiptdate
+  and l_shipdate < l_commitdate
+  and l_receiptdate >= date '1994-01-01'
+  and l_receiptdate < date '1994-01-01' + interval '1' year
+group by
+   l_shipmode
+order by
+   l_shipmode;
+
+L_SHIPMODE HIGH_LINE_COUNT LOW_LINE_COUNT
+---------- --------------- --------------
+MAIL                  6202           9324
+SHIP                  6200           9262
+
+2 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+==========================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                    |                    ROWS |
+----------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                    |                       2 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                         |                       2 |
+|    2  |      SORT INSTANT                                                    |                       2 |
+|    3  |        SINGLE CLUSTER                                                | LOCAL/REMOTE          2 |
+|    4  |          SELECT STATEMENT                                            |                       2 |
+|    5  |            QUERY BLOCK ("$QB_IDX_2")                                 |                       2 |
+|    6  |              GROUP HASH INSTANT                                      |                       2 |
+|    7  |                NESTED JOIN (INNER JOIN)                              |                   15545 |
+|    8  |                  TABLE ACCESS ("LINEITEM" AS _A2)                    |                   15545 |
+|    9  |                  INDEX ACCESS ("ORDERS" AS _A1, "ORDERS_PK_INDEX")   | (     15545)      15545 |
+==========================================================================================================
+
+     1  -  TARGET : LINEITEM.L_SHIPMODE, SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY = '1-URGENT' OR ORDERS.O_ORDERPRIORITY = '2-HIGH' ) THEN 1 ELSE 0 END  ) AS HIGH_LINE_COUNT, SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY <> '1-URGENT' AND ORDERS.O_ORDERPRIORITY <> '2-HIGH' ) THEN 1 ELSE 0 END  ) AS LOW_LINE_COUNT
+     2  -  SORT KEY : "LINEITEM.L_SHIPMODE ASC NULLS LAST"
+           RECORD COLUMN : SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY = '1-URGENT' OR ORDERS.O_ORDERPRIORITY = '2-HIGH' ) THEN 1 ELSE 0 END  ), SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY <> '1-URGENT' AND ORDERS.O_ORDERPRIORITY <> '2-HIGH' ) THEN 1 ELSE 0 END  )
+           READ KEY COLUMN : LINEITEM.L_SHIPMODE
+           READ RECORD COLUMN : SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY = '1-URGENT' OR ORDERS.O_ORDERPRIORITY = '2-HIGH' ) THEN 1 ELSE 0 END  ), SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY <> '1-URGENT' AND ORDERS.O_ORDERPRIORITY <> '2-HIGH' ) THEN 1 ELSE 0 END  )
+     3  -  SQL : SELECT /*+ USE_GROUP_HASH(7) KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."ORDERS_PK_INDEX" ) */ "_A2"."L_SHIPMODE", SUM( CASE WHEN ("_A1"."O_ORDERPRIORITY" = :_V0 OR "_A1"."O_ORDERPRIORITY" = :_V1) THEN :_V2 ELSE :_V3 END  ), SUM( CASE WHEN "_A1"."O_ORDERPRIORITY" <> :_V0 AND "_A1"."O_ORDERPRIORITY" <> :_V1 THEN :_V2 ELSE :_V3 END  ) FROM ( "PUBLIC"."LINEITEM"@LOCAL AS "_A2" INNER JOIN "PUBLIC"."ORDERS"@LOCAL AS "_A1" ON true ) ALIAS "_A3" WHERE "_A2"."L_COMMITDATE" > "_A2"."L_SHIPDATE" AND "_A2"."L_RECEIPTDATE" > "_A2"."L_COMMITDATE" AND "_A2"."L_RECEIPTDATE" < :_V8 AND "_A2"."L_RECEIPTDATE" >= :_V9 AND ("_A2"."L_SHIPMODE") IN (:_V10,:_V11) AND "_A1"."O_ORDERKEY" = "_A2"."L_ORDERKEY" GROUP BY "_A2"."L_SHIPMODE"
+           TARGET DOMAIN : G1(G1N1) 2 rows, G2(G2N1) 2 rows
+           RE-GROUPING
+             GROUP KEY : LINEITEM.L_SHIPMODE
+             AGGREGATION : SUM( SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY = '1-URGENT' OR ORDERS.O_ORDERPRIORITY = '2-HIGH' ) THEN 1 ELSE 0 END  ) ), SUM( SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY <> '1-URGENT' AND ORDERS.O_ORDERPRIORITY <> '2-HIGH' ) THEN 1 ELSE 0 END  ) )
+     5  -  TARGET : _A2.L_SHIPMODE, SUM( CASE WHEN ( _A1.O_ORDERPRIORITY = :_V0 OR _A1.O_ORDERPRIORITY = :_V1 ) THEN :_V2 ELSE :_V3 END  ), SUM( CASE WHEN ( _A1.O_ORDERPRIORITY <> :_V0 AND _A1.O_ORDERPRIORITY <> :_V1 ) THEN :_V2 ELSE :_V3 END  )
+     6  -  GROUP KEY : _A2.L_SHIPMODE
+           RECORD COLUMN : SUM( CASE WHEN ( _A1.O_ORDERPRIORITY = :_V0 OR _A1.O_ORDERPRIORITY = :_V1 ) THEN :_V2 ELSE :_V3 END  ), SUM( CASE WHEN ( _A1.O_ORDERPRIORITY <> :_V0 AND _A1.O_ORDERPRIORITY <> :_V1 ) THEN :_V2 ELSE :_V3 END  )
+           READ KEY COLUMN : _A2.L_SHIPMODE
+           READ RECORD COLUMN : SUM( CASE WHEN ( _A1.O_ORDERPRIORITY = :_V0 OR _A1.O_ORDERPRIORITY = :_V1 ) THEN :_V2 ELSE :_V3 END  ), SUM( CASE WHEN ( _A1.O_ORDERPRIORITY <> :_V0 AND _A1.O_ORDERPRIORITY <> :_V1 ) THEN :_V2 ELSE :_V3 END  )
+     7  -  JOINED COLUMN : _A2.L_SHIPMODE, _A1.O_ORDERPRIORITY
+             CONSTANT FILTER : TRUE
+     8  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : _A2.L_ORDERKEY, _A2.L_SHIPDATE, _A2.L_COMMITDATE, _A2.L_RECEIPTDATE, _A2.L_SHIPMODE
+             PHYSICAL FILTER : _A2.L_COMMITDATE > _A2.L_SHIPDATE AND _A2.L_RECEIPTDATE > _A2.L_COMMITDATE AND _A2.L_RECEIPTDATE < :_V8 AND _A2.L_RECEIPTDATE >= :_V9 AND ( _A2.L_SHIPMODE ) IN ( :_V10, :_V11 )
+     9  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.O_ORDERKEY
+           READ TABLE COLUMN : _A1.O_ORDERPRIORITY
+             MIN RANGE : _A1.O_ORDERKEY = {_A2.L_ORDERKEY}
+             MAX RANGE : _A1.O_ORDERKEY = {_A2.L_ORDERKEY}
+           FETCH ONE ROW
+
+<<<  end print plan
+
+
+
+--###############################
+--# Functional Query Definition
+--###############################
+
+\set linesize 400
+\set timing on;
+
+--# result: 2 rows
+--#  l_shipmode | high_line_count | low_line_count 
+--# ------------+-----------------+----------------
+--#  MAIL       |            6202 |           9324
+--#  SHIP       |            6200 |           9262
+
+\explain plan 
+select
+    l_shipmode,
+    sum( case
+             when o_orderpriority ='1-URGENT'
+                  or o_orderpriority ='2-HIGH'
+             then 1
+             else 0
+         end ) as high_line_count,
+    sum( case
+             when o_orderpriority <> '1-URGENT'
+              and o_orderpriority <> '2-HIGH'
+             then 1
+             else 0
+         end ) as low_line_count
+from
+    orders,
+    lineitem
+where
+      o_orderkey = l_orderkey
+  and l_shipmode in ('MAIL', 'SHIP')
+  and l_commitdate < l_receiptdate
+  and l_shipdate < l_commitdate
+  and l_receiptdate >= date '1994-01-01'
+  and l_receiptdate < date '1994-01-01' + interval '1' year
+group by
+   l_shipmode
+order by
+   l_shipmode;
+
+L_SHIPMODE HIGH_LINE_COUNT LOW_LINE_COUNT
+---------- --------------- --------------
+MAIL                  6202           9324
+SHIP                  6200           9262
+
+2 rows selected.
+
+>>>  start print plan
+
+< Execution Plan >
+==========================================================================================================
+|  IDX  |  NODE DESCRIPTION                                                    |                    ROWS |
+----------------------------------------------------------------------------------------------------------
+|    0  |  SELECT STATEMENT                                                    |                       2 |
+|    1  |    QUERY BLOCK ("$QB_IDX_2")                                         |                       2 |
+|    2  |      SORT INSTANT                                                    |                       2 |
+|    3  |        SINGLE CLUSTER                                                | LOCAL/REMOTE          2 |
+|    4  |          SELECT STATEMENT                                            |                       2 |
+|    5  |            QUERY BLOCK ("$QB_IDX_2")                                 |                       2 |
+|    6  |              GROUP HASH INSTANT                                      |                       2 |
+|    7  |                NESTED JOIN (INNER JOIN)                              |                   15545 |
+|    8  |                  TABLE ACCESS ("LINEITEM" AS _A2)                    |                   15545 |
+|    9  |                  INDEX ACCESS ("ORDERS" AS _A1, "ORDERS_PK_INDEX")   | (     15545)      15545 |
+==========================================================================================================
+
+     1  -  TARGET : LINEITEM.L_SHIPMODE, SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY = '1-URGENT' OR ORDERS.O_ORDERPRIORITY = '2-HIGH' ) THEN 1 ELSE 0 END  ) AS HIGH_LINE_COUNT, SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY <> '1-URGENT' AND ORDERS.O_ORDERPRIORITY <> '2-HIGH' ) THEN 1 ELSE 0 END  ) AS LOW_LINE_COUNT
+     2  -  SORT KEY : "LINEITEM.L_SHIPMODE ASC NULLS LAST"
+           RECORD COLUMN : SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY = '1-URGENT' OR ORDERS.O_ORDERPRIORITY = '2-HIGH' ) THEN 1 ELSE 0 END  ), SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY <> '1-URGENT' AND ORDERS.O_ORDERPRIORITY <> '2-HIGH' ) THEN 1 ELSE 0 END  )
+           READ KEY COLUMN : LINEITEM.L_SHIPMODE
+           READ RECORD COLUMN : SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY = '1-URGENT' OR ORDERS.O_ORDERPRIORITY = '2-HIGH' ) THEN 1 ELSE 0 END  ), SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY <> '1-URGENT' AND ORDERS.O_ORDERPRIORITY <> '2-HIGH' ) THEN 1 ELSE 0 END  )
+     3  -  SQL : SELECT /*+ USE_GROUP_HASH(7) KEEP_JOINED_TABLE USE_NL_IN( _A1 ) FULL( _A2 ) INDEX( _A1, "PUBLIC"."ORDERS_PK_INDEX" ) */ "_A2"."L_SHIPMODE", SUM( CASE WHEN ("_A1"."O_ORDERPRIORITY" = :_V0 OR "_A1"."O_ORDERPRIORITY" = :_V1) THEN :_V2 ELSE :_V3 END  ), SUM( CASE WHEN "_A1"."O_ORDERPRIORITY" <> :_V0 AND "_A1"."O_ORDERPRIORITY" <> :_V1 THEN :_V2 ELSE :_V3 END  ) FROM ( "PUBLIC"."LINEITEM"@LOCAL AS "_A2" INNER JOIN "PUBLIC"."ORDERS"@LOCAL AS "_A1" ON true ) ALIAS "_A3" WHERE "_A2"."L_COMMITDATE" > "_A2"."L_SHIPDATE" AND "_A2"."L_RECEIPTDATE" > "_A2"."L_COMMITDATE" AND "_A2"."L_RECEIPTDATE" < :_V8 AND "_A2"."L_RECEIPTDATE" >= :_V9 AND ("_A2"."L_SHIPMODE") IN (:_V10,:_V11) AND "_A1"."O_ORDERKEY" = "_A2"."L_ORDERKEY" GROUP BY "_A2"."L_SHIPMODE"
+           TARGET DOMAIN : G1(G1N1) 2 rows, G2(G2N1) 2 rows
+           RE-GROUPING
+             GROUP KEY : LINEITEM.L_SHIPMODE
+             AGGREGATION : SUM( SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY = '1-URGENT' OR ORDERS.O_ORDERPRIORITY = '2-HIGH' ) THEN 1 ELSE 0 END  ) ), SUM( SUM( CASE WHEN ( ORDERS.O_ORDERPRIORITY <> '1-URGENT' AND ORDERS.O_ORDERPRIORITY <> '2-HIGH' ) THEN 1 ELSE 0 END  ) )
+     5  -  TARGET : _A2.L_SHIPMODE, SUM( CASE WHEN ( _A1.O_ORDERPRIORITY = :_V0 OR _A1.O_ORDERPRIORITY = :_V1 ) THEN :_V2 ELSE :_V3 END  ), SUM( CASE WHEN ( _A1.O_ORDERPRIORITY <> :_V0 AND _A1.O_ORDERPRIORITY <> :_V1 ) THEN :_V2 ELSE :_V3 END  )
+     6  -  GROUP KEY : _A2.L_SHIPMODE
+           RECORD COLUMN : SUM( CASE WHEN ( _A1.O_ORDERPRIORITY = :_V0 OR _A1.O_ORDERPRIORITY = :_V1 ) THEN :_V2 ELSE :_V3 END  ), SUM( CASE WHEN ( _A1.O_ORDERPRIORITY <> :_V0 AND _A1.O_ORDERPRIORITY <> :_V1 ) THEN :_V2 ELSE :_V3 END  )
+           READ KEY COLUMN : _A2.L_SHIPMODE
+           READ RECORD COLUMN : SUM( CASE WHEN ( _A1.O_ORDERPRIORITY = :_V0 OR _A1.O_ORDERPRIORITY = :_V1 ) THEN :_V2 ELSE :_V3 END  ), SUM( CASE WHEN ( _A1.O_ORDERPRIORITY <> :_V0 AND _A1.O_ORDERPRIORITY <> :_V1 ) THEN :_V2 ELSE :_V3 END  )
+     7  -  JOINED COLUMN : _A2.L_SHIPMODE, _A1.O_ORDERPRIORITY
+             CONSTANT FILTER : TRUE
+     8  -  HASH SHARD ( # 3 ) 
+           READ COLUMN : _A2.L_ORDERKEY, _A2.L_SHIPDATE, _A2.L_COMMITDATE, _A2.L_RECEIPTDATE, _A2.L_SHIPMODE
+             PHYSICAL FILTER : _A2.L_COMMITDATE > _A2.L_SHIPDATE AND _A2.L_RECEIPTDATE > _A2.L_COMMITDATE AND _A2.L_RECEIPTDATE < :_V8 AND _A2.L_RECEIPTDATE >= :_V9 AND ( _A2.L_SHIPMODE ) IN ( :_V10, :_V11 )
+     9  -  HASH SHARD ( # 3 ) 
+           READ INDEX COLUMN : _A1.O_ORDERKEY
+           READ TABLE COLUMN : _A1.O_ORDERPRIORITY
+             MIN RANGE : _A1.O_ORDERKEY = {_A2.L_ORDERKEY}
+             MAX RANGE : _A1.O_ORDERKEY = {_A2.L_ORDERKEY}
+           FETCH ONE ROW
+
+<<<  end print plan
+
+
+Elapsed time: 354.26100 ms 
+
+
+--#################################
+--# Report
+--#################################
+
+\set timing off;
+INSERT INTO TPCH_SF1_REPORT 
+       VALUES ( 'SF1_Q12', (:VAR_ELAPSED_TIME__ / 1000), TRUNC( 60 * 60 * 1000 / :VAR_ELAPSED_TIME__, 0 ) );
+
+1 row created.
+
+COMMIT;
+
+Commit complete.
+

@@ -4,4 +4,5 @@
 HOW-TO-RUN
 
 $tpch/tpch> 1upload.sh 
+
 $tpch/tpch> 2query.sh

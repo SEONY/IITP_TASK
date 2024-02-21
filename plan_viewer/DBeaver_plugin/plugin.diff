@@ -1,0 +1,30 @@
+diff --git a/features/org.jkiss.dbeaver.db.feature/feature.xml b/features/org.jkiss.dbeaver.db.feature/feature.xml
+index 4e42a3be12..e735ffa0e4 100644
+--- a/features/org.jkiss.dbeaver.db.feature/feature.xml
++++ b/features/org.jkiss.dbeaver.db.feature/feature.xml
+@@ -272,4 +272,11 @@
+            version="0.0.0"
+            unpack="false"/>
+ 
++   <plugin
++         id="org.jkiss.dbeaver.ext.goldilocks"
++         download-size="0"
++         install-size="0"
++         version="0.0.0"
++         unpack="false"/>
++
+ </feature>
+diff --git a/plugins/pom.xml b/plugins/pom.xml
+index ceb6100d40..567ce9cfb2 100644
+--- a/plugins/pom.xml
++++ b/plugins/pom.xml
+@@ -23,6 +23,8 @@
+ 
+         <module>org.jkiss.dbeaver.ext.generic</module>
+ 
++        <module>org.jkiss.dbeaver.ext.goldilocks</module>
++
+         <module>org.jkiss.dbeaver.ext.athena</module>
+         <module>org.jkiss.dbeaver.ext.bigquery</module>
+         <module>org.jkiss.dbeaver.ext.clickhouse</module>
+

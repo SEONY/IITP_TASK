@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.2"?>
+<plugin>
+    <extension point="org.jkiss.dbeaver.generic.meta">
+        <meta id="goldilocks" class="org.jkiss.dbeaver.ext.goldilocks.model.GoldilocksMetaModel" driverClass="sunje.goldilocks.jdbc.GoldilocksDriver"/>
+    </extension>
+    <extension point="org.jkiss.dbeaver.dataSourceProvider">
+        <datasource
+                class="org.jkiss.dbeaver.ext.goldilocks.GoldilocksDataSourceProvider"
+                description="%datasource.goldilocks.description"
+                id="goldilocks"
+                parent="generic"
+                label="Goldilocks DB"
+                icon="icons/goldilocks_icon.png"
+                dialect="goldilocks">
+            <tree path="goldilocks" label="Goldilocks data source" supportsEntityMerge="true">
+                <items label="#catalog" path="catalog" property="catalogList" icon="#database" optional="true">
+                    <items label="#schema" path="schema" property="schemaList" icon="#schema" optional="true">
+                        <folder type="org.jkiss.dbeaver.ext.generic.model.GenericTable" label="%tree.tables.node.name" icon="#folder_table" description="%tree.tables.node.tip">
+                            <items label="%tree.table.node.name" path="table" property="physicalTables" icon="#table">
+                                <folder type="org.jkiss.dbeaver.ext.generic.model.GenericTableColumn" label="%tree.columns.node.name" icon="#columns" description="%tree.columns.node.tip">
+                                    <items label="%tree.column.node.name" path="attribute" property="attributes" icon="#column"></items>
+                                </folder>
+                                <folder type="org.jkiss.dbeaver.ext.generic.model.GenericUniqueKey" label="%tree.constraints.node.name" icon="#constraints" description="%tree.constraints.node.tip" visibleIf="!object.view &amp;&amp; object.dataSource.info.supportsReferentialIntegrity()">
+                                    <items label="%tree.constraint.node.name" path="uniqueKey" property="constraints" icon="#unique-key">
+                                        <items label="%tree.constraint.columns.node.name" itemLabel="%tree.column.node.name" path="column" property="attributeReferences" navigable="false" inline="true"></items>
+                                    </items>
+                                </folder>
+                                <folder type="org.jkiss.dbeaver.ext.generic.model.GenericTableIndex" label="%tree.indexes.node.name" icon="#indexes" description="%tree.indexes.node.tip" visibleIf="object.dataSource.info.supportsIndexes()">
+                                    <items label="%tree.index.node.name" path="index" property="indexes" icon="#index">
+                                        <items label="%tree.index_columns.node.name" path="column" property="attributeReferences" icon="#column" navigable="false" inline="true"></items>
+                                    </items>
+                                </folder>
+                                <items label="%tree.sub_table.node.name" optional="true" path="subtable" property="subTables" icon="#table" recursive=".." visibleIf="!object.view"></items>
+                            </items>
+                        </folder>
+                        <folder type="org.jkiss.dbeaver.ext.generic.model.GenericView" label="%tree.tviews.node.name" icon="#folder_view" description="%tree.tviews.node.tip" visibleIf="object.dataSource.metaModel.supportsViews(object.dataSource)">
+                            <items label="%tree.tview.node.name" path="view" property="views" icon="#view">
+                                <folder type="org.jkiss.dbeaver.ext.generic.model.GenericTableColumn" label="%tree.columns.node.name" icon="#columns" description="View columns">
+                                    <items label="%tree.column.node.name" path="attribute" property="attributes" icon="#column"></items>
+                                </folder>
+                            </items>
+                        </folder>
+                        <folder type="org.jkiss.dbeaver.model.struct.rdb.DBSTableIndex" label="%tree.indexes.node.name" icon="#indexes" description="%tree.indexes.node.tip" visibleIf="object.dataSource.info.supportsIndexes()">
+                            <items icon="#index" label="%tree.index.node.name" path="index" property="indexes" virtual="true">
+                                <items icon="#column" label="%tree.index_columns.node.name" itemLabel="%tree.column.node.name" path="column" property="attributeReferences" inline="true" navigable="false" virtual="true"></items>
+                            </items>
+                        </folder>
+                        <folder type="org.jkiss.dbeaver.ext.generic.model.GenericProcedure" label="%tree.procedures.node.name" icon="#procedures" description="Procedures" visibleIf="object.dataSource.info.supportsStoredCode()">
+                            <items label="%tree.procedures.node.name" itemLabel="%tree.procedure.node.name" path="procedure" property="proceduresOnly" icon="#procedure">
+                                <items label="%tree.procedure_columns.node.name" itemLabel="%tree.column.node.name" path="column" property="parameters" navigable="false"/></items>
+                            <items label="%tree.package.node.name" path="package" property="packages" icon="#package">
+                                <items label="%tree.procedures.node.name" itemLabel="%tree.procedure.node.name" path="procedure" property="procedures" icon="#procedure">
+                                    <items label="%tree.procedure_columns.node.name" itemLabel="%tree.column.node.name" path="column" property="parameters" navigable="false" inline="true"/></items>
+                            </items>
+                        </folder>
+                        <folder label="%tree.functions.node.name" icon="#functions" description="Functions" visibleIf="object.dataSource.info.supportsStoredCode() &amp;&amp; object.dataSource.splitProceduresAndFunctions()">
+                            <items label="%tree.functions.node.name" itemLabel="%tree.function.node.name" path="function" property="functionsOnly" icon="#function">
+                                <items label="%tree.function_columns.node.name" itemLabel="%tree.column.node.name" path="column" property="parameters" navigable="false"/></items>
+                        </folder>
+                        <folder type="org.jkiss.dbeaver.ext.generic.model.GenericSequence" label="%tree.sequences.node.name" icon="#sequences" description="%tree.sequences.node.tip" visibleIf="object.dataSource.metaModel.supportsSequences(object.dataSource)">
+                            <items label="%tree.sequence.node.name" path="sequence" property="sequences" icon="#sequence"/>
+                        </folder>
+                        <folder type="org.jkiss.dbeaver.ext.generic.model.GenericSynonym" label="%tree.synonyms.node.name" icon="#synonyms" description="Synonyms" visibleIf="object.dataSource.metaModel.supportsSynonyms(object.dataSource)">
+                            <items label="%tree.synonym.node.name" path="synonym" property="synonyms" icon="#synonym"/>
+                        </folder>
+                        <folder type="org.jkiss.dbeaver.model.struct.DBSDataType" label="%tree.dataTypes.node.name" icon="#data_types" description="%tree.dataTypes.node.tip">
+                            <items label="%tree.dataType.node.name" path="dataType" property="dataTypes" icon="#data_type"/>
+                        </folder>
+                    </items>
+                </items>
+            </tree>
+            <drivers managable="true">
+                <driver
+                        id="goldilocks_jdbc"
+                        label="Goldilocks"
+                        class="sunje.goldilocks.jdbc.GoldilocksDriver"
+                        icon="icons/goldilocks_icon.png"
+                        iconBig="icons/goldilocks_icon_big.png"
+                        sampleURL="jdbc:goldilocks://{host}:{port}/{database}"
+                        defaultPort="22581"
+                        description="Goldilocks JDBC driver"
+                        webURL="http://www.sunjesoft.com"
+                        categories="sql">
+                    <parameter name="omit-catalog" value="true"/>
+                    <parameter name="supports-scroll" value="true"/>
+                    <parameter name="supports-multi-insert" value="true"/>
+                    <parameter name="script-delimiter-after-block" value="true"/>
+                </driver>
+            </drivers>
+        </datasource>
+    </extension>
+    <extension point="org.jkiss.dbeaver.sqlDialect">
+        <dialect id="goldilocks" parent="generic" class="org.jkiss.dbeaver.ext.goldilocks.model.GoldilocksSQLDialect" label="Goldilocks" description="Goldilocks dialect." icon="icons/goldilocks_icon.png"></dialect>
+    </extension>
+</plugin>

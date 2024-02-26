@@ -1,0 +1,18 @@
+resource/config.json client resource/log_20221201.json time '2022-10-18 11:07:49' '2022-10-18 11:07:57'
+resource/config.json client resource/log_20221201.json tag sql1
+resource/config.json client resource/log_20221201.json 
+resource/config.json client resource/log_20221201.json name stmt
+
+resource/config.json demon
+
+-config resource/config.json -demon
+-config resource/config.json -client -log resource/log_20221206.json -head 10 -time '2022-12-06 17:20:47.242' '2022-12-06 17:20:55.140'
+-config resource/config.json -client -log resource/log_20221206.json -head 10 -tag sql1
+-config resource/config.json -client -log resource/log_20221206.json -head 10
+-config resource/config.json -client -log resource/log_20221206.json -head 10 -name stmt
+-config resource/config.json -client -log resource/log_20221206.json -tag sql1 -tail 10
+
+curl -L -v -d '[ { "point": [ { "name": "exec", "value": 3073, "tag": "sql1", "alert": false }, { "name": "optdata", "value": 2643, "tag": "sql1", "alert": false }, { "name": "session", "value": 5, "tag": "sql1", "alert": false }, { "name": "g-session", "value": 0, "tag": "sql1", "alert": false }, { "name": "peer", "value": 1, "tag": "sql1", "alert": false }, { "name": "lock", "value": 0, "tag": "sql1", "alert": false }, { "name": "long_Tx", "value": 1, "tag": "sql1", "alert": false }, { "name": "tbs", "value": 1, "tag": "sql2", "alert": false }, { "name": "global-ager", "value": 0, "tag": "sql2", "alert": false }, { "name": "group-ager", "value": 0, "tag": "sql2", "alert": false }, { "name": "local-ager", "value": 0, "tag": "sql2", "alert": false }, { "name": "stmt", "value": 15, "tag": "sql2", "alert": false }, { "name": "disk-/home", "value": 99, "tag": "sql1", "alert": false }, { "name": "MemAvaimb", "value": 50096, "tag": "sql1", "alert": true } ] } ]' \
+-H "Content-Type: application/json" -H "Accept: application/json" \
+http://localhost:5108/dbs/gop/test1
+

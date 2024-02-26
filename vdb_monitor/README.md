@@ -1,2 +1,2 @@
 # VDB_MONITOR
-monitor program for virtual db
+monitor program for virtual db (GOP)

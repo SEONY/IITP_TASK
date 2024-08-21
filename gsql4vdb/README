@@ -1,0 +1,46 @@
+- gsql을 이용하여 vdb에 ODBC로 접속하는 법 (rev.20.1.26) -
+
+1. 우선 unixODBC의 isql로 해당 DSN(아래 예에서는 Oracle)에 접속할 수 있는 환경을 만들어야 합니다.
+
+{{{
+
+$> isql -v -3 Oracle htkim htkim
++---------------------------------------+
+| Connected!                            |
+|                                       |
+| sql-statement                         |
+| help [tablename]                      |
+| quit                                  |
+|                                       |
++---------------------------------------+
+SQL>
+
+}}}
+
+
+2. gsql 옵션 중 -d는 ODBC 드라이버의 경로 입니다. 그리고 --dsn 은 SQLConnect로 접속할 DSN 이름입니다.
+
+{{{
+
+$> gsql htkim htkim -d /home/oracle/app/oracle/product/12.1.0/dbhome_1/lib/libsqora.so.12.1 --dsn Oracle
+
+ Copyright © 2010 SUNJESOFT Inc. All rights reserved.
+ Debug Trunk 24.1.0 revision(5caadfa)
+
+
+Connected to GOLDILOCKS Database.
+
+gSQL> select * from dual;
+
+DUMMY
+-----
+X    
+
+1 row selected.
+
+}}}
+
+
+
+3. 일반적인 SQL 은 수행 가능하기만, gsql의 명령인 desc, explain 등의 명령은 수행할 수 없습니다.
+
